@@ -7,7 +7,6 @@ _start:
     # 任务1提到xv6的第一条指令就是设置栈指针
     # 我们也这样做，直接设置栈指针sp，不再需要gp的设置
     la sp, stack_top
-
     # 清零 BSS 段
     # 符号 bss_start 和 bss_end 将在链接脚本中定义
     la a0, bss_start
