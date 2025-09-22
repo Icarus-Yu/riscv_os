@@ -9,6 +9,7 @@ OBJDUMP = $(TOOLCHAIN)objdump
 
 CFLAGS = -Wall -Werror -O0 -fno-omit-frame-pointer -ggdb -MD
 CFLAGS += -ffreestanding -nostdlib -mno-relax -mcmodel=medany
+CFLAGS += -Iinclude
 
 LDFLAGS = -T kernel/kernel.ld -nostdlib
 
