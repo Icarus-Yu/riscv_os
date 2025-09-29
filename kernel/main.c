@@ -7,7 +7,7 @@ void uart_puts(char *s);
 void main() {
     int test_var = 42;
     int *ptr = &test_var;
-
+    clear_screen();
     printf("====== Experiment 2 Test Start ======\n");
     printf("Testing integer: %d\n", 12345);
     printf("Testing negative integer: %d\n", -54321);
