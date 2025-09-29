@@ -3,6 +3,7 @@
 // 静态辅助函数声明
 static void printint(long long xx, int base, int sign);
 static void printptr(unsigned long long x);
+static void vprintf(const char *fmt, va_list ap);
 
 // printint - 打印一个带符号的整数 (迭代实现，避免栈溢出)
 // xx: 要打印的数字
@@ -37,23 +38,22 @@ static void printint(long long xx, int base, int sign) {
 static void printptr(unsigned long long x) {
     consputc('0');
     consputc('x');
+    // RISC-V 是 64 位架构, 所以指针是 8 字节, 16 个十六进制位
     for (int i = 0; i < (sizeof(unsigned long long) * 2); i++, x <<= 4) {
         consputc("0123456789abcdef"[x >> (sizeof(unsigned long long) * 8 - 4)]);
     }
 }
 
-
-// printf - 内核格式化输出主函数
-void printf(const char *fmt, ...) {
-    va_list ap;
+// vprintf - printf 的核心实现，接收一个 va_list
+// 这是 printf 和 printf_color 代码复用的关键
+static void vprintf(const char *fmt, va_list ap) {
     char *s;
     int c;
 
     if (fmt == 0) {
-        return; // 处理空指针
+        return;
     }
 
-    va_start(ap, fmt);
     for (const char *p = fmt; *p; p++) {
         if (*p != '%') {
             consputc(*p);
@@ -96,14 +96,41 @@ void printf(const char *fmt, ...) {
                 break;
         }
     }
+}
+
+// printf - 内核格式化输出主函数
+void printf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    vprintf(fmt, ap); // 调用核心实现
     va_end(ap);
 }
 
-// 清屏函数实现
+// printf_color - 以指定颜色打印格式化字符串
+void printf_color(int color, const char *fmt, ...) {
+    va_list ap;
+
+    // 1. 设置颜色
+    printf("\033[%dm", color);
+
+    // 2. 调用 vprintf 核心实现
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+
+    // 3. 恢复默认颜色
+    printf("\033[%dm", COLOR_RESET);
+}
+
+// clear_screen - 清屏函数
 void clear_screen(void) {
-    // 发送ANSI转义序列: \033 是 ESC 的八进制表示
-    // [2J 表示清除整个屏幕
-    uart_puts("\033[2J"); 
-    // [H 表示将光标移动到左上角
-    uart_puts("\033[H");
+    // 发送 ANSI 转义序列: \033[2J 清除整个屏幕, \033[H 将光标移到左上角
+    printf("\033[2J\033[H");
+}
+
+// goto_xy - 将光标移动到指定位置
+// x: 列号 (column), y: 行号 (row)
+void goto_xy(int x, int y) {
+    // 发送 ANSI 转义序列 \033[<L>;<C>H
+    printf("\033[%d;%dH", y, x);
 }
