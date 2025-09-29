@@ -111,3 +111,4 @@ Testing NULL pointer: 0x0
 3.  **传入未知格式符**: `printf("... %q ...")` 能够将 `%q` 原样输出，不会导致程序异常。
 
 ### 运行截图/录屏
+![alt text](image.png)
