@@ -1,5 +1,15 @@
 #include <console.h>
-
+#include <memory.h>
+#include "string.h"
+ // for memset
+// --- 新增 memset 实现 ---
+void* memset(void *dst, int c, uint64_t n) {
+    char *cdst = (char *) dst;
+    for (uint64_t i = 0; i < n; i++){
+        cdst[i] = c;
+    }
+    return dst;
+}
 // 静态辅助函数声明
 static void printint(long long xx, int base, int sign);
 static void printptr(unsigned long long x);

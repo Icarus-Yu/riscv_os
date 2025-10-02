@@ -1,4 +1,5 @@
 #include "console.h"
+#include "memory.h"
 
 // 声明在 uart.c 中定义的函数
 void uart_puts(char *s);
@@ -36,25 +37,21 @@ void main() {
     //     // This is a clear, intentionally empty loop body.
     // }
 
-    // 阶段二：清空屏幕，然后进行光标定位画图
-    clear_screen(); // <--- 在这里清屏
-    goto_xy(10, 5);
-    printf("+--------------------+");
-    goto_xy(10, 6);
-    printf("|                    |");
-    goto_xy(10, 7);
-    printf("|   Hello, Cursor!   |");
-    goto_xy(10, 8);
-    printf("|                    |");
-    goto_xy(10, 9);
-    printf("+--------------------+");
+    printf("====== OS Starting ======\n");
 
-    // 3. 将光标移动到框下面，继续输出
-    goto_xy(1, 12);
-    printf("Cursor positioning test complete!\n");
+    // 初始化物理内存分配器
+    kinit();
+
+    // 创建内核页表
+    kvminit();
+
+    // 激活分页
+    kvminithart();
+
+    printf("====== Paging Activated, Hello Virtual Memory! ======\n");
     // 任务完成后，进入死循环
-   
 
-    
+
+
     while (1);
 }
