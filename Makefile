@@ -7,7 +7,7 @@ OBJCOPY = $(TOOLCHAIN)objcopy
 OBJDUMP = $(TOOLCHAIN)objdump
 
 CFLAGS = -Wall -Werror -O0 -fno-omit-frame-pointer -ggdb -MD
-CFLAGS += -ffreestanding -nostdlib -mno-relax -mcmodel=medany
+CFLAGS += -ffreestanding -nostdlib -mno-relax -mcmodel=medany -march=rv64g
 CFLAGS += -Iinclude
 
 # --- 修改 LDFLAGS ---
@@ -15,18 +15,24 @@ CFLAGS += -Iinclude
 LDFLAGS = -T scripts/kernel.ld -nostdlib
 
 # --- 修改源文件搜索路径 ---
-# 使用 find 命令来递归查找所有 .S 和 .c 文件，这样更灵活
-SOURCES_S = $(shell find kernel -name '*.S')
+# 显式地将 entry.S 分离出来，确保它在链接时是第一个
+ENTRY_S = kernel/boot/entry.S
+
+# 查找所有其他的 .S 文件
+SOURCES_S_OTHER = $(filter-out $(ENTRY_S), $(shell find kernel -name '*.S'))
 SOURCES_C = $(shell find kernel -name '*.c')
 
-OBJECTS_S = $(patsubst %.S, %.o, $(SOURCES_S))
+# 转换 .o 文件
+OBJECT_ENTRY = $(patsubst %.S, %.o, $(ENTRY_S))
+OBJECTS_S_OTHER = $(patsubst %.S, %.o, $(SOURCES_S_OTHER))
 OBJECTS_C = $(patsubst %.c, %.o, $(SOURCES_C))
 
-OBJECTS = $(OBJECTS_S) $(OBJECTS_C)
+# 确保 OBJECT_ENTRY (entry.o) 在链接顺序的最前面
+OBJECTS = $(OBJECT_ENTRY) $(OBJECTS_S_OTHER) $(OBJECTS_C)
 DEPS = $(patsubst %.o, %.d, $(OBJECTS))
 TARGET_ELF = kernel/kernel.elf
 
-QEMU_OPTS = -machine virt -bios none -kernel $(TARGET_ELF) -nographic
+QEMU_OPTS = -machine virt -bios default -kernel $(TARGET_ELF) -nographic
 
 .PHONY: all clean qemu qemu-gdb debug
 

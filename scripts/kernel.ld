@@ -9,7 +9,7 @@ PHDRS
   data PT_LOAD FLAGS(6);  /* 权限 RW-, 6 = Read(4) + Write(2) */
 }
 
-BASE_ADDRESS = 0x80000000; /* xv6将内核放在这个地址 */
+BASE_ADDRESS = 0x80200000; /* xv6将内核放在这个地址 */
 
 SECTIONS
 {

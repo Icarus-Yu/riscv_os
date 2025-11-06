@@ -1,29 +1,111 @@
-// include/riscv.h
 #ifndef __RISCV_H__
 #define __RISCV_H__
 
-#include <stdint.h> // 用于 uint64_t 等类型
+#include <stdint.h>
 
-// 页面大小为 4096 字节
+// 页面大小
 #define PGSIZE 4096
-// 页面偏移量的位数
 #define PGSHIFT 12
 
-// 将地址向下对齐到页面边界
 #define PGROUNDDOWN(a) (((a)) & ~(PGSIZE - 1))
-// 将地址向上对齐到页面边界
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))
 
-// 页表项 (PTE) 的权限位
-#define PTE_V (1L << 0) // Valid
-#define PTE_R (1L << 1) // Read
-#define PTE_W (1L << 2) // Write
-#define PTE_X (1L << 3) // Execute
-#define PTE_U (1L << 4) // User
+// 页表项权限位
+#define PTE_V (1L << 0)
+#define PTE_R (1L << 1)
+#define PTE_W (1L << 2)
+#define PTE_X (1L << 3)
+#define PTE_U (1L << 4)
 
-// 页表项类型定义
 typedef uint64_t pte_t;
-// 页表类型定义 (一个指向PTE数组的指针)
 typedef uint64_t *pagetable_t;
 
-#endif // __RISCV_H__
+// === 新增：中断相关的 CSR 寄存器操作 ===
+
+// 读取 sstatus 寄存器
+static inline uint64_t r_sstatus() {
+    uint64_t x;
+    asm volatile("csrr %0, sstatus" : "=r" (x));
+    return x;
+}
+
+// 写入 sstatus 寄存器
+static inline void w_sstatus(uint64_t x) {
+    asm volatile("csrw sstatus, %0" : : "r" (x));
+}
+
+// sstatus 寄存器的位定义
+#define SSTATUS_SIE (1L << 1)  // Supervisor Interrupt Enable
+
+// 读取 sie 寄存器（中断使能）
+static inline uint64_t r_sie() {
+    uint64_t x;
+    asm volatile("csrr %0, sie" : "=r" (x));
+    return x;
+}
+
+// 写入 sie 寄存器
+static inline void w_sie(uint64_t x) {
+    asm volatile("csrw sie, %0" : : "r" (x));
+}
+
+// sie 寄存器的位定义
+#define SIE_SEIE (1L << 9)  // 外部中断
+#define SIE_STIE (1L << 5)  // 时钟中断
+#define SIE_SSIE (1L << 1)  // 软件中断
+
+// 读取 scause 寄存器（中断/异常原因）
+static inline uint64_t r_scause() {
+    uint64_t x;
+    asm volatile("csrr %0, scause" : "=r" (x));
+    return x;
+}
+
+// 读取 sepc 寄存器（异常返回地址）
+static inline uint64_t r_sepc() {
+    uint64_t x;
+    asm volatile("csrr %0, sepc" : "=r" (x));
+    return x;
+}
+
+// 写入 sepc 寄存器
+static inline void w_sepc(uint64_t x) {
+    asm volatile("csrw sepc, %0" : : "r" (x));
+}
+
+// 读取 stvec 寄存器（中断向量地址）
+static inline uint64_t r_stvec() {
+    uint64_t x;
+    asm volatile("csrr %0, stvec" : "=r" (x));
+    return x;
+}
+
+// 写入 stvec 寄存器
+static inline void w_stvec(uint64_t x) {
+    asm volatile("csrw stvec, %0" : : "r" (x));
+}
+
+// 读取 time 寄存器（当前时间）
+static inline uint64_t r_time() {
+    uint64_t x;
+    asm volatile("csrr %0, time" : "=r" (x));
+    return x;
+}
+
+// 开启中断
+static inline void intr_on() {
+    w_sstatus(r_sstatus() | SSTATUS_SIE);
+}
+
+// 关闭中断
+static inline void intr_off() {
+    w_sstatus(r_sstatus() & ~SSTATUS_SIE);
+}
+
+// 检查中断是否开启
+static inline int intr_get() {
+    uint64_t x = r_sstatus();
+    return (x & SSTATUS_SIE) != 0;
+}
+
+#endif
