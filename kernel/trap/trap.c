@@ -69,8 +69,6 @@ void kerneltrap(void) {
                 
                 cycles_to_time(uptime, &seconds, &milliseconds);
                 
-                // 使用正确的格式打印 uint64_t
-                // 在没有完整 %lu 支持时，强制转换为 int
                 printf_color(COLOR_GREEN, 
                     "[Timer] Tick #%d | Cycles: %d\n",
                     (int)(timer_ticks & 0x7FFFFFFF),  // 只取低31位避免负数
