@@ -95,7 +95,8 @@ void proc_test_main(void) {
 
         // **重要**：主动让出 CPU
         // 否则这个进程将永远占用 CPU
-        yield();
+        //注释yield();移除主动让出效果
+        //yield();
     }
 }
 

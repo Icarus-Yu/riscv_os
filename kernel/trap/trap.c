@@ -1,6 +1,7 @@
 #include "console.h"
 #include "trap.h"
 #include "sbi.h"
+#include "proc.h"
 
 // 时钟中断间隔（0.1秒 = 1,000,000 cycles @ 10MHz）
 #define TIMER_INTERVAL 1000000
@@ -37,53 +38,59 @@ void trapinit(void) {
 void timerinit(void) {
     // 确保 timer_ticks 为 0
     timer_ticks = 0;
-    
+
     // 记录启动时间
     boot_time = get_time();
-    
+
     // 开启时钟中断
     w_sie(r_sie() | SIE_STIE);
-    
+
     // 设置第一次时钟中断
     set_next_timer();
-    
+
     printf("timerinit: Timer initialized (interval=0.1s)\n");
     printf("timerinit: boot_time=%d cycles\n", (int)boot_time);
 }
 
 void kerneltrap(void) {
     uint64_t scause = r_scause();
-    
+
     if (scause & (1ULL << 63)) {
         uint64_t interrupt_code = scause & 0x7FFFFFFFFFFFFFFF;
-        
+
         if (interrupt_code == 5) {
             // 时钟中断
             timer_ticks = timer_ticks + 1;  // 明确的递增
-            
+
             // 每10次中断打印一次
             if ((timer_ticks % 10) == 0) {
                 uint64_t now = get_time();
                 uint64_t uptime = now - boot_time;
                 uint64_t seconds, milliseconds;
-                
+
                 cycles_to_time(uptime, &seconds, &milliseconds);
-                
-                printf_color(COLOR_GREEN, 
+
+                printf_color(COLOR_GREEN,
                     "[Timer] Tick #%d | Cycles: %d\n",
                     (int)(timer_ticks & 0x7FFFFFFF),  // 只取低31位避免负数
-                    (int)seconds, 
+                    (int)seconds,
                     (int)milliseconds,
                     (int)uptime);
             }
-            
+            // 设置下一次时钟中断
             set_next_timer();
+            //新增实现抢占式调度
+            //如果有进程正在运行，则强制让出cpu
+            if(current_proc != 0 && current_proc->state == RUNNING) {
+                yield();
+            }
+
         } else {
             printf_color(COLOR_RED, "Unknown interrupt: %d\n", (int)interrupt_code);
         }
     } else {
-        printf_color(COLOR_RED, 
-            "Unexpected trap: scause=0x%x, sepc=0x%x\n", 
+        printf_color(COLOR_RED,
+            "Unexpected trap: scause=0x%x, sepc=0x%x\n",
             (int)scause, (int)r_sepc());
         while(1);
     }
