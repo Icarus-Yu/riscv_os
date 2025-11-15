@@ -48,7 +48,7 @@ void kvminit(void) {
     memset(kernel_pagetable, 0, PGSIZE);
 
     extern char etext[];
-    
+
     printf("kvminit: etext = %p\n", etext);
     printf("kvminit: Mapping kernel memory...\n");
 
@@ -62,12 +62,12 @@ void kvminit(void) {
     // 从 0x80200000 到 etext，权限为 R+X
     uint64_t kernel_start = 0x80200000L;
     uint64_t kernel_code_size = PGROUNDUP((uint64_t)etext - kernel_start);
-    
-    printf("kvminit: Mapping kernel code: VA=PA=%p, size=%p\n", 
+
+    printf("kvminit: Mapping kernel code: VA=PA=%p, size=%p\n",
            kernel_start, kernel_code_size);
-    
-    if (mappages(kernel_pagetable, kernel_start, kernel_code_size, 
-                 kernel_start, PTE_R | PTE_X) != 0) {
+
+    if (mappages(kernel_pagetable, kernel_start, kernel_code_size,
+                 kernel_start, PTE_R | PTE_X | PTE_W) != 0) { // <--- 添加 PTE_W
         printf("kvminit: Kernel code mapping failed!\n");
         return;
     }
@@ -76,11 +76,11 @@ void kvminit(void) {
     // 从 etext 到 PHYSTOP (0x88000000)，权限为 R+W
     uint64_t data_start = PGROUNDUP((uint64_t)etext);
     uint64_t data_size = 0x88000000L - data_start;
-    
-    printf("kvminit: Mapping kernel data: VA=PA=%p, size=%p\n", 
+
+    printf("kvminit: Mapping kernel data: VA=PA=%p, size=%p\n",
            data_start, data_size);
-    
-    if (mappages(kernel_pagetable, data_start, data_size, 
+
+    if (mappages(kernel_pagetable, data_start, data_size,
                  data_start, PTE_R | PTE_W) != 0) {
         printf("kvminit: Kernel data mapping failed!\n");
         return;
@@ -92,18 +92,18 @@ void kvminit(void) {
 void kvminithart(void) {
     // 在写入 satp 之前，先刷新指令缓存
     asm volatile("fence.i");
-    
+
     // 构造 satp 值: MODE=Sv39 (8) | PPN
     uint64_t satp = (8L << 60) | (((uint64_t)kernel_pagetable) >> 12);
-    
+
     printf("kvminithart: Setting satp to %p\n", satp);
     printf("kvminithart: kernel_pagetable at %p\n", kernel_pagetable);
-    
+
     // 写入 satp 寄存器，启用分页
     asm volatile("csrw satp, %0" : : "r" (satp));
-    
+
     // 刷新 TLB
     asm volatile("sfence.vma zero, zero");
-    
+
     printf("kvminithart: Paging enabled successfully!\n");
 }

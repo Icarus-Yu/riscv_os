@@ -31,16 +31,23 @@ void main() {
 
     // ----------------------------------------------------
     // <--- 2. 新增实验五的初始化调用 ---
-    printf("\n====== Experiment 5: Process Init ======\n");
+   printf("\n====== Experiment 5: Process & Scheduling ======\n");
     procinit();
+
+    create_test_proc(); // 创建第一个测试进程 (PID 1)
+    create_test_proc(); // 创建第二个测试进程 (PID 2)
     // ----------------------------------------------------
 
-    printf("System is now running. Timer interrupts will be displayed below:\n");
-    printf("(Press Ctrl+A then X to exit QEMU)\n");
-    printf("----------------------------------------\n");
+    // ----------------------------------------------------
+    // <--- 3. 替换 while(1) ---
+    // main 函数的使命结束，将控制权交给调度器
+    // scheduler() 函数将永不返回
+    scheduler();
+    // ----------------------------------------------------
 
+    // 下面的代码将永远不会被执行
+    printf("System is now running. Timer interrupts will be displayed below:\n");
+    printf("----------------------------------------\n");
     while (1) {
-        // CPU 在这里等待中断
-        // 在下一步中，这里将被 scheduler() 调用替换
     }
 }

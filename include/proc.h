@@ -60,4 +60,16 @@ void procinit(void);
 
 // 上下文切换函数 (在 swtch.S 中实现)
 void swtch(struct context *old, struct context *new);
+
+
+struct proc* allocproc(void); // 分配进程
+void scheduler(void);     // 调度器
+void yield(void);         // 主动让出
+void create_test_proc(void); // 创建测试进程
+void proc_entry_point(void); // 进程入口点 (内部使用)
+void proc_test_main(void);   // 测试进程主函数 (内部使用)
+
+// 外部变量
+extern struct proc *current_proc; // 当前运行的进程
+
 #endif // __PROC_H__
