@@ -43,6 +43,16 @@ found:
         p->state = UNUSED;
         return 0;
     }
+    //为陷阱trap分配一个物理页
+    // <--- 新增代码开始 --->
+    // 分配 trapframe 页面
+    if((p->trapframe = (struct trapframe *)kalloc()) == 0){
+        kfree((void*)p->kstack); // 释放之前分配的栈
+        p->kstack = 0;
+        p->state = UNUSED;
+        return 0;
+    }
+    // <--- 新增代码结束 --->
 
     // 4. 初始化上下文
     // 清空上下文结构体
