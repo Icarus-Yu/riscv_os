@@ -17,4 +17,7 @@ void set_next_timer(void);
 uint64_t get_time(void);
 void cycles_to_time(uint64_t cycles, uint64_t *seconds, uint64_t *milliseconds);
 
+// 新增以下两个函数声明
+void usertrap(void);
+void usertrapret(void);
 #endif

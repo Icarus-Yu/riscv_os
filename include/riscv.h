@@ -20,6 +20,8 @@
 typedef uint64_t pte_t;
 typedef uint64_t *pagetable_t;
 
+#define SSTATUS_SPIE (1L << 5) // Supervisor Previous Interrupt Enable
+#define SSTATUS_SPP (1L << 8)  // Supervisor Previous Privilege
 // === 新增：中断相关的 CSR 寄存器操作 ===
 
 // 读取 sstatus 寄存器
@@ -108,4 +110,24 @@ static inline int intr_get() {
     return (x & SSTATUS_SIE) != 0;
 }
 
+// 读取 stval 寄存器 (Scause Trap Value)
+static inline uint64_t r_stval() {
+    uint64_t x;
+    asm volatile("csrr %0, stval" : "=r" (x));
+    return x;
+}
+
+// 读取 satp 寄存器 (Supervisor Address Translation and Protection)
+static inline uint64_t r_satp() {
+    uint64_t x;
+    asm volatile("csrr %0, satp" : "=r" (x));
+    return x;
+}
+
+// 读取 tp 寄存器 (Thread Pointer, 用于保存 hartid)
+static inline uint64_t r_tp() {
+    uint64_t x;
+    asm volatile("mv %0, tp" : "=r" (x));
+    return x;
+}
 #endif

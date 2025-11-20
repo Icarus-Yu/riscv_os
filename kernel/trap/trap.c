@@ -2,7 +2,13 @@
 #include "trap.h"
 #include "sbi.h"
 #include "proc.h"
-
+#include "riscv.h"
+#include "syscall.h"
+extern void userret(uint64_t trapframe, uint64_t satp);
+extern void uservec(void); // 声明外部汇编函数 用于陷阱处理
+extern void kernelvec(void);
+extern void syscall(void);
+extern int sys_exit(void);
 // 时钟中断间隔（0.1秒 = 1,000,000 cycles @ 10MHz）
 #define TIMER_INTERVAL 1000000
 
@@ -94,4 +100,78 @@ void kerneltrap(void) {
             (int)scause, (int)r_sepc());
         while(1);
     }
+}
+// 处理来自用户态的中断/异常
+void usertrap(void) {
+    struct proc *p = current_proc;
+    uint64_t scause = r_scause();
+
+    // 检查是否是系统调用 (ECALL from U-mode)
+    // scause 为 8 代表 "Environment call from User mode"
+    if (scause == 8) {
+        // 1. 检查进程是否被杀
+        if(p->state == ZOMBIE) // 简化检查
+            sys_exit();
+
+        // 2. EPC + 4
+        // ecall 指令长度为 4 字节。如果不加 4，
+        // 系统调用返回后会再次执行 ecall，导致死循环。
+        p->trapframe->epc += 4;
+
+        // 3. 开启中断
+        // 系统调用通常是耗时的操作，允许在执行期间被时钟中断打断（抢占）
+        intr_on();
+
+        // 4. 执行系统调用
+        syscall();
+    }
+    else if((scause & 0x8000000000000000L) && (scause & 0xff) == 5) {
+        // 如果是用户态时的时钟中断
+        set_next_timer();
+        yield(); // 主动让出 CPU
+    }
+    else {
+        printf("usertrap(): unexpected scause %p pid=%d\n", scause, p->pid);
+        printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+        sys_exit(); // 发生未知异常，杀死进程
+    }
+
+    // 准备返回用户态
+    usertrapret();
+}
+
+// 返回用户态的准备工作
+void usertrapret(void) {
+    struct proc *p = current_proc;
+
+    intr_off();
+
+    // 设置 stvec 指向汇编入口 uservec
+    uint64_t trampoline_uservec = (uint64_t)uservec;
+    w_stvec(trampoline_uservec);
+
+    // 设置 trapframe 中的内核信息，供下一次 uservec 使用
+    p->trapframe->kernel_satp = r_satp();         // 内核页表
+    p->trapframe->kernel_sp = p->kstack + PGSIZE; // 内核栈顶
+    p->trapframe->kernel_trap = (uint64_t)usertrap; // C处理函数地址
+    p->trapframe->kernel_hartid = r_tp();         // CPU核ID
+
+    // 设置 SSTATUS
+    // SPP = 0 (User mode), SPIE = 1 (Enable Interrupts)
+    unsigned long x = r_sstatus();
+    x &= ~SSTATUS_SPP;
+    x |= SSTATUS_SPIE;
+    w_sstatus(x);
+
+    // 设置 SEPC (用户程序计数器)
+    w_sepc(p->trapframe->epc);
+
+    // 准备 satp 参数 (目前我们没有独立的用户页表，暂时用内核的或0)
+    // 正常情况下这里应该是: uint64_t satp = MAKE_SATP(p->pagetable);
+    uint64_t satp = 0;
+
+    // 调用汇编代码，跳回用户态！
+    // 这是一个单向调用，不会返回
+    uint64_t fn = (uint64_t)userret;
+    ((void (*)(uint64_t, uint64_t))fn)((uint64_t)p->trapframe, satp);
 }
