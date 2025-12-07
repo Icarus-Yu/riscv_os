@@ -57,7 +57,13 @@ void kvminit(void) {
         printf("kvminit: UART mapping failed!\n");
         return;
     }
-
+    // <--- 【新增代码开始】 --->
+    // 1.1 映射 VirtIO 磁盘设备 (恒等映射)
+    // VirtIO MMIO 基地址为 0x10001000
+    if (mappages(kernel_pagetable, 0x10001000L, PGSIZE, 0x10001000L, PTE_R | PTE_W) != 0) {
+        panic("kvminit: VirtIO mapping failed!");
+    }
+    // <--- 【新增代码结束】 --->
     // 2. 映射内核代码段 (恒等映射: 虚拟地址 = 物理地址)
     // 从 0x80200000 到 etext，权限为 R+X
     uint64_t kernel_start = 0x80200000L;

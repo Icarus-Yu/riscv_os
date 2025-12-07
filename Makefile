@@ -33,6 +33,8 @@ DEPS = $(patsubst %.o, %.d, $(OBJECTS))
 TARGET_ELF = kernel/kernel.elf
 
 QEMU_OPTS = -machine virt -bios default -kernel $(TARGET_ELF) -nographic
+QEMU_OPTS += -drive file=fs.img,if=none,format=raw,id=x0
+QEMU_OPTS += -device virtio-blk-device,drive=x0,bus=virtio-mmio-bus.0
 
 .PHONY: all clean qemu qemu-gdb debug
 

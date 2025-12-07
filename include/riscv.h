@@ -7,7 +7,9 @@
 typedef unsigned char uchar;
 typedef unsigned int  uint;
 typedef unsigned short ushort;
-typedef uint64_t uint64; // <--- 添加这一行
+typedef uint64_t uint64; // 
+typedef uint32_t uint32; // <--- 新增
+typedef uint16_t uint16; // <--- 新增
 // -----------------------
 // 页面大小
 #define PGSIZE 4096
