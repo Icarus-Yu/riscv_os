@@ -11,14 +11,38 @@ struct proc proc[NPROC];
 struct proc *current_proc = 0; // 当前正在运行的进程 (TODO: 多核时需要改为 per-cpu)
 struct context scheduler_context; // 调度器自己的上下文
 static int nextpid = 1; // 下一个进程ID
-
-
+extern char etext[]; // 声明链接脚本中的符号
+extern int mappages(pagetable_t pagetable, uint64_t va, uint64_t size, uint64_t pa, int perm);
 // 1. 定义 initcode 机器码
 // 这段汇编对应：write(1, "Hello, Syscall!\n", 16); exit(0);
 uchar initcode[] = {
-  0x13, 0x05, 0x10, 0x00, 0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x05, 0x00, 0x93, 0x08, 0x00, 0x01,
-  0x73, 0x00, 0x00, 0x00, 0x13, 0x05, 0x00, 0x00, 0x93, 0x08, 0x20, 0x00, 0x73, 0x00, 0x00, 0x00,
-  'H', 'e', 'l', 'l', 'o', ',', ' ', 'S', 'y', 's', 'c', 'a', 'l', 'l', '!', '\n'
+    // 1. li a0, 1 (stdout)
+    0x13, 0x05, 0x10, 0x00,
+    
+    // 2. li a1, 32 (buffer address = 0x20)
+    // 字符串 "Hello..." 紧跟在指令后，刚好在偏移 32 字节处
+    0x93, 0x05, 0x00, 0x02, 
+    
+    // 3. li a2, 16 (length)
+    0x13, 0x06, 0x00, 0x01,
+    
+    // 4. li a7, 16 (SYS_write)
+    0x93, 0x08, 0x00, 0x01,
+    
+    // 5. ecall
+    0x73, 0x00, 0x00, 0x00,
+    
+    // 6. li a0, 0 (exit status)
+    0x13, 0x05, 0x00, 0x00,
+    
+    // 7. li a7, 2 (SYS_exit)
+    0x93, 0x08, 0x20, 0x00,
+    
+    // 8. ecall
+    0x73, 0x00, 0x00, 0x00,
+
+    // String data (offset 32)
+    'H', 'e', 'l', 'l', 'o', ',', ' ', 'S', 'y', 's', 'c', 'a', 'l', 'l', '!', '\n'
 };
 // 辅助函数：初始化进程表
 void procinit(void) {
@@ -79,6 +103,26 @@ found:
     p->pagetable = uvmcreate();
     if(p->pagetable == 0){
         // 失败处理：释放 trapframe 和 kstack
+        kfree((void*)p->trapframe);
+        kfree((void*)p->kstack);
+        p->trapframe = 0;
+        p->kstack = 0;
+        p->state = UNUSED;
+        return 0;
+    }
+    // 关键修复：将内核代码段映射到用户页表
+    // 这样当 satp 切换到用户页表时，userret 和 uservec 的代码依然是可访问的
+    // 注意：不要设置 PTE_U 权限，这样用户态程序无法直接跳转进来，
+    // 但运行在 S 模式下的 userret/uservec 可以执行它。
+    
+    // 计算内核代码大小 (从 0x80200000 到 etext)
+    //uint64_t kcode_start = 0x80200000L;
+    //uint64_t kcode_size = (uint64_t)etext - kcode_start;
+    
+    // 向上取整到页边界
+    if (mappages(p->pagetable, 0x80000000L, 0x8000000L, 
+                 0x80000000L, PTE_R | PTE_W | PTE_X) != 0) {
+        printf("allocproc: failed to map all kernel memory\n");
         kfree((void*)p->trapframe);
         kfree((void*)p->kstack);
         p->trapframe = 0;
