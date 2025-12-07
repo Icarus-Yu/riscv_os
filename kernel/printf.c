@@ -153,3 +153,13 @@ void goto_xy(int x, int y) {
     // 发送 ANSI 转义序列 \033[<L>;<C>H
     printf("\033[%d;%dH", y, x);
 }
+
+void panic(char *s) {
+    printf("panic: ");
+    printf(s);
+    printf("\n");
+    
+    // 进入无限循环，冻结系统状态
+    for(;;)
+        ;
+}

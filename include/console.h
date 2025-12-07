@@ -16,7 +16,7 @@ void printf(const char *fmt, ...);
 void clear_screen(void);
 void goto_xy(int x, int y);
 void printf_color(int color, const char *fmt, ...);
-
+ void panic(char *s); // <--- 新增这一行
 // --- console.c ---
 void consputc(char c);
 

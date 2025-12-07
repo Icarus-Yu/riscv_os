@@ -2,33 +2,46 @@
 #include "proc.h"
 #include "syscall.h"
 #include "console.h"
+#include "memory.h"
 //文件处理相关
-
+extern pte_t* walk(pagetable_t pagetable, uint64 va, int alloc);
 // 引用 syscall.c 中的 argint
 extern int argint(int n, int *ip);
 extern int argaddr(int n, uint64_t *ip);
 extern int consgetc(void);
 // 写文件系统调用
 // 参数: fd (a0), buf (a1), count (a2)
+// 写文件系统调用
 int sys_write(void) {
     int fd;
     uint64_t p; 
     int n;
 
     // 获取参数
-    if (argint(0, &fd) < 0 || argint(2, &n) < 0)
+    if (argint(0, &fd) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
         return -1;
     
-    // 获取缓冲区地址 (直接从 a1 读取)
-    p = current_proc->trapframe->a1;
-
     // 目前只支持向 stdout (1) 和 stderr (2) 写入
     if (fd == 1 || fd == 2) {
-        // 注意：这里假设我们能直接访问该地址 (内核线程或恒等映射)
-        // 在真正的用户进程中，需要通过页表转换地址 (copyin)
-        char *s = (char *)p;
         for (int i = 0; i < n; i++) {
-            consputc(s[i]);
+            // 1. 计算当前字符的用户虚拟地址
+            uint64 va = p + i;
+            
+            // 2. 查用户的页表，找到对应的页表项 (PTE)
+            pte_t *pte = walk(current_proc->pagetable, va, 0);
+            
+            // 3. 检查地址是否有效
+            if(pte == 0 || (*pte & PTE_V) == 0) {
+                return -1; // 地址未映射
+            }
+            
+            // 4. 获取物理地址
+            uint64 pa = PTE2PA(*pte);      // 获取该页的物理基址
+            uint64 offset = va & 0xFFF;    // 获取页内偏移
+            char *ch_addr = (char *)(pa + offset); // 组合成完整的物理地址
+            
+            // 5. 在内核中，物理地址是直接映射的，可以直接读取
+            consputc(*ch_addr);
         }
         return n;
     }

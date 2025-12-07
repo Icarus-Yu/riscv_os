@@ -65,9 +65,9 @@ uservec:
     ld t0, 16(a0)
 
     # 注意：如果你的 OS 实现了独立的用户页表，这里需要切换 satp
-    # ld t1, 0(a0)      # 加载 kernel_satp
-    # csrw satp, t1     # 切换到内核页表
-    # sfence.vma zero, zero
+     ld t1, 0(a0)      # 加载 kernel_satp
+     csrw satp, t1     # 切换到内核页表
+     sfence.vma zero, zero
 
     # 4. 跳转到 C 语言处理函数 usertrap()
     jr t0
@@ -82,8 +82,8 @@ userret:
     # a1: 用户页表 (satp 值) - 暂时未用，因为还没做用户页表隔离
 
     # 1. 切换页表 (如果需要)
-    # csrw satp, a1
-    # sfence.vma zero, zero
+     csrw satp, a1
+     sfence.vma zero, zero
 
     # 2. 将 trapframe 地址放入 sscratch
     #    这样下次进入 uservec 时能找到它

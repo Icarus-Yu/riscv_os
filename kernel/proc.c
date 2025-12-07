@@ -12,12 +12,33 @@ struct proc *current_proc = 0; // 当前正在运行的进程 (TODO: 多核时�
 struct context scheduler_context; // 调度器自己的上下文
 static int nextpid = 1; // 下一个进程ID
 
+
+// 1. 定义 initcode 机器码
+// 这段汇编对应：write(1, "Hello, Syscall!\n", 16); exit(0);
+uchar initcode[] = {
+  0x13, 0x05, 0x10, 0x00, 0x17, 0x05, 0x00, 0x00, 0x13, 0x05, 0x05, 0x00, 0x93, 0x08, 0x00, 0x01,
+  0x73, 0x00, 0x00, 0x00, 0x13, 0x05, 0x00, 0x00, 0x93, 0x08, 0x20, 0x00, 0x73, 0x00, 0x00, 0x00,
+  'H', 'e', 'l', 'l', 'o', ',', ' ', 'S', 'y', 's', 'c', 'a', 'l', 'l', '!', '\n'
+};
 // 辅助函数：初始化进程表
 void procinit(void) {
     for(int i = 0; i < NPROC; i++) {
         proc[i].state = UNUSED;
     }
     printf_color(COLOR_YELLOW, "procinit: Process table initialized.\n");
+}
+
+extern void usertrapret(void);
+
+// ----------------------------------------------------------------
+// 【新增函数】：forkret
+// 作用：这是新进程（由 fork 或 userinit 创建）第一次被调度器选中时，
+// CPU 会跳转到的第一个函数。它的任务是引导进程从内核态“返回”到用户态。
+// ----------------------------------------------------------------
+void forkret(void) {
+    // 在完整的 xv6 中，这里会释放进程锁。
+    // 我们目前简化处理，直接调用 usertrapret 返回用户态。
+    usertrapret();
 }
 
 struct proc* allocproc(void) {
@@ -54,6 +75,17 @@ found:
     }
     // <--- 新增代码结束 --->
 
+    // 3. 【新增】创建用户页表
+    p->pagetable = uvmcreate();
+    if(p->pagetable == 0){
+        // 失败处理：释放 trapframe 和 kstack
+        kfree((void*)p->trapframe);
+        kfree((void*)p->kstack);
+        p->trapframe = 0;
+        p->kstack = 0;
+        p->state = UNUSED;
+        return 0;
+    }
     // 4. 初始化上下文
     // 清空上下文结构体
     memset(&p->context, 0, sizeof(p->context));
@@ -66,8 +98,9 @@ found:
     // 当 swtch 第一次切换到这个进程时，它会 ret
     // ret 会跳转到 ra 寄存器指向的地址
     // 我们将其指向一个“进程入口”函数
-    p->context.ra = (uint64_t)proc_entry_point;
+    //p->context.ra = (uint64_t)proc_entry_point;
     // 新增：初始化新字段
+    p->context.ra = (uint64)forkret;  // 使用 forkret
     p->parent = 0;
     p->chan = 0;
     p->killed = 0;
@@ -292,4 +325,57 @@ void wakeup(void *chan) {
             p->state = RUNNABLE;
         }
     }
+}
+
+// 2. 实现 userinit 函数
+void userinit(void) {
+  struct proc *p;
+
+  // 分配一个进程结构体
+  p = allocproc();
+  
+  // 这里的 current_proc = p 是为了应对有些内存分配函数可能需要“当前进程”上下文
+  // 但在早期启动阶段其实不是严格必须，为了保险起见可以保留
+  current_proc = p; 
+
+  // 分配一个物理页来存放用户代码
+  char *mem = kalloc();
+  if(mem == 0) {
+      panic("userinit: kalloc failed");
+  }
+  memset(mem, 0, PGSIZE);
+  
+  // 将 initcode 机器码拷贝到这个物理页中
+  // 注意：initcode 很小，一定小于一页 (4096字节)
+  for(int i = 0; i < sizeof(initcode); i++){
+      mem[i] = initcode[i];
+  }
+
+  // 关键步骤：建立用户页表映射
+  // 将虚拟地址 0 映射到物理地址 mem，权限为 R/W/X/U
+  // 注意：用户态代码必须有 PTE_U 权限才能执行
+  if(mappages(p->pagetable, 0, PGSIZE, (uint64)mem, PTE_W|PTE_R|PTE_X|PTE_U) != 0){
+      panic("userinit: mappages failed");
+  }
+
+  // 设置进程大小为一页
+  p->sz = PGSIZE;
+
+  // 设置 Trapframe 中的状态
+  // EPC (Exception Program Counter): 用户程序从虚拟地址 0 开始执行
+  p->trapframe->epc = 0;      
+  // SP (Stack Pointer): 用户栈顶设为一页的末尾 (4096)
+  p->trapframe->sp = PGSIZE;  
+
+  // 设置进程名称 (使用 memcpy 替代 safestrcpy)
+  // "initcode" 长度为 8，拷贝 9 字节包含 '\0'
+  memcpy(p->name, "initcode", 9);
+  
+  // 将进程状态设为 RUNNABLE，这样调度器就能调度它了
+  p->state = RUNNABLE;
+
+  // 恢复 current_proc
+  current_proc = 0;
+  
+  printf("userinit: created first user process\n");
 }

@@ -91,12 +91,13 @@ struct proc {
     // 启用 trapframe
     struct trapframe *trapframe; // 陷阱帧
     
-    // pagetable_t pagetable; // 用户页表 (稍后启用)
+    pagetable_t pagetable; // 用户页表 
     struct proc *parent;    // 父进程指针
     void *chan;             // 休眠通道 (用于 sleep/wakeup)
     int killed;             // 是否被 kill
     int xstate;             // 退出状态码 (exit status)
     uint64_t sz;            // 进程内存大小
+    char name[16];
 };
 
 // --- proc.c 中的函数原型 ---
@@ -111,6 +112,7 @@ void swtch(struct context *old, struct context *new);
 struct proc* allocproc(void); // 分配进程
 void scheduler(void);     // 调度器
 void yield(void);         // 主动让出
+void userinit(void);    // 创建第一个用户进程
 void create_test_proc(void); // 创建测试进程
 void proc_entry_point(void); // 进程入口点 (内部使用)
 void proc_test_main(void);   // 测试进程主函数 (内部使用)
