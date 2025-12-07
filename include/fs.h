@@ -2,7 +2,7 @@
 #ifndef __FS_H__
 #define __FS_H__
 
-#include "riscv.h"
+#include "types.h"
 
 // 磁盘布局相关常量
 #define BSIZE 1024        // 块大小 (Block Size)

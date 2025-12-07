@@ -57,7 +57,7 @@ $(TARGET_ELF): $(OBJECTS)
 
 clean:
 	rm -rf kernel/kernel.elf $(shell find kernel -name '*.o' -o -name '*.d')
-
+	rm -f fs.img mkfs/mkfs README
 qemu: $(TARGET_ELF)
 	@echo "Starting QEMU..."
 	@qemu-system-riscv64 $(QEMU_OPTS)
@@ -73,3 +73,15 @@ debug: $(TARGET_ELF)
 		attach-session -t kernel_debug
 
 -include $(DEPS)
+
+# 定义 mkfs 编译器 (使用宿主机的 gcc)
+HOSTCC = gcc
+
+# 生成 fs.img 的规则
+fs.img: mkfs/mkfs
+	@echo "Hello, RISC-V File System!" > README
+	./mkfs/mkfs fs.img README
+
+# 编译 mkfs（宿主机工具）
+mkfs/mkfs: mkfs/mkfs.c include/types.h include/fs.h include/stat.h
+	gcc -Wall -Werror -O0 -g -iquote include -std=gnu11 $< -o $@

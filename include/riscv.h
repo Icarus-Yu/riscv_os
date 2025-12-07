@@ -2,15 +2,15 @@
 #define __RISCV_H__
 
 #include <stdint.h>
-
-// --- 新增：常用类型缩写 ---
-typedef unsigned char uchar;
-typedef unsigned int  uint;
-typedef unsigned short ushort;
-typedef uint64_t uint64; // 
-typedef uint32_t uint32; // <--- 新增
-typedef uint16_t uint16; // <--- 新增
-// -----------------------
+#include "types.h"
+// // --- 新增：常用类型缩写 ---
+// typedef unsigned char uchar;
+// typedef unsigned int  uint;
+// typedef unsigned short ushort;
+// typedef uint64_t uint64; // 
+// typedef uint32_t uint32; // <--- 新增
+// typedef uint16_t uint16; // <--- 新增
+// // -----------------------
 // 页面大小
 #define PGSIZE 4096
 #define PGSHIFT 12
