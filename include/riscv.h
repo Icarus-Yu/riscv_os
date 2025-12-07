@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+// --- 新增：常用类型缩写 ---
+typedef unsigned char uchar;
+typedef unsigned int  uint;
+typedef unsigned short ushort;
+typedef uint64_t uint64; // <--- 添加这一行
+// -----------------------
 // 页面大小
 #define PGSIZE 4096
 #define PGSHIFT 12
@@ -55,7 +61,8 @@ static inline void w_sie(uint64_t x) {
 #define SIE_SEIE (1L << 9)  // 外部中断
 #define SIE_STIE (1L << 5)  // 时钟中断
 #define SIE_SSIE (1L << 1)  // 软件中断
-
+#define MAKE_SATP(pagetable) (8L << 60 | (uint64)pagetable >> 12)
+// SATP 构造宏 (Sv39模式: Mode=8)
 // 读取 scause 寄存器（中断/异常原因）
 static inline uint64_t r_scause() {
     uint64_t x;
@@ -130,4 +137,8 @@ static inline uint64_t r_tp() {
     asm volatile("mv %0, tp" : "=r" (x));
     return x;
 }
+
+// include/riscv.h
+#define PTE2PA(pte) (((pte) >> 10) << 12)
+#define PA2PTE(pa) ((((uint64)pa) >> 12) << 10)
 #endif

@@ -166,10 +166,11 @@ void usertrapret(void) {
     // 设置 SEPC (用户程序计数器)
     w_sepc(p->trapframe->epc);
 
-    // 准备 satp 参数 (目前我们没有独立的用户页表，暂时用内核的或0)
-    // 正常情况下这里应该是: uint64_t satp = MAKE_SATP(p->pagetable);
-    uint64_t satp = 0;
-
+    // --- 修改开始 ---
+    // 构造用户页表的 satp 值
+    uint64 satp = MAKE_SATP(p->pagetable);
+    // --- 修改结束 ---
+    
     // 调用汇编代码，跳回用户态！
     // 这是一个单向调用，不会返回
     uint64_t fn = (uint64_t)userret;

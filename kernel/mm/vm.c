@@ -107,3 +107,24 @@ void kvminithart(void) {
 
     printf("kvminithart: Paging enabled successfully!\n");
 }
+
+// 创建一个空的用户页表
+// 返回指向页表根目录的指针，失败返回 0
+pagetable_t uvmcreate(void) {
+  pagetable_t pagetable;
+  pagetable = (pagetable_t) kalloc();
+  if(pagetable == 0)
+    return 0;
+  memset(pagetable, 0, PGSIZE);
+  return pagetable;
+}
+
+// 递归释放页表页面 (但不释放叶子节点指向的物理内存)
+void freewalk(pagetable_t pagetable) {
+  // 简化的实现：在实验6中，如果还没实现完整的uvmfree，
+  // 可以先留空或者只释放根节点，但这会导致内存泄漏。
+  // 完整的 freewalk 需要递归遍历三级页表。
+  // 暂时为了跑通实验6，我们可以简单地：
+  if (pagetable) 
+      kfree((void*)pagetable);
+}

@@ -34,14 +34,18 @@ void main() {
    printf("\n====== Experiment 5: Process & Scheduling ======\n");
     procinit();
 
-    create_test_proc(); // 创建第一个测试进程 (PID 1)
-    create_test_proc(); // 创建第二个测试进程 (PID 2)
-    // ----------------------------------------------------
+    //create_test_proc(); // 创建第一个测试进程 (PID 1)
+    //create_test_proc(); // 创建第二个测试进程 (PID 2)
+    //// ----------------------------------------------------
 
     // ----------------------------------------------------
     // <--- 3. 替换 while(1) ---
     // main 函数的使命结束，将控制权交给调度器
     // scheduler() 函数将永不返回
+    printf("\n====== Experiment 6: System Call Verification ======\n");
+    // 创建第一个用户进程
+    userinit(); 
+    // --- 修改结束 ---
     scheduler();
     // ----------------------------------------------------
 
