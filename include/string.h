@@ -16,4 +16,9 @@ void* memset(void *dst, int c, uint64_t n);
 // 新增 memcpy 声明
 void* memcpy(void *dst, const void *src, uint64_t n);
 
+void* memmove(void *dst, const void *src, uint64 n); // <--- 新增
+int strncmp(const char *p, const char *q, uint64 n); // <--- 新增
+int strlen(const char *s);                           // <--- 新增(备用)
+char* strncpy(char *s, const char *t, int n);        // <--- 新增(备用)
+char* safestrcpy(char *s, const char *t, int n);     // <--- 新增(备用)
 #endif // __MEMORY_H__

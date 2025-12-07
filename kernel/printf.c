@@ -163,3 +163,64 @@ void panic(char *s) {
     for(;;)
         ;
 }
+
+// kernel/printf.c 末尾追加
+
+// memmove: 安全的内存拷贝，处理重叠区域
+void* memmove(void *dst, const void *src, uint64 n) {
+  const char *s;
+  char *d;
+
+  s = src;
+  d = dst;
+  if(s < d && s + n > d){
+    // 如果有重叠且 src 在 dst 前面，从后往前拷
+    s += n;
+    d += n;
+    while(n-- > 0)
+      *--d = *--s;
+  } else {
+    // 否则从前往后拷
+    while(n-- > 0)
+      *d++ = *s++;
+  }
+  return dst;
+}
+
+// strncmp: 比较字符串前 n 个字符
+int strncmp(const char *p, const char *q, uint64 n) {
+  while(n > 0 && *p && *p == *q)
+    n--, p++, q++;
+  if(n == 0)
+    return 0;
+  return (uchar)*p - (uchar)*q;
+}
+
+// strlen: 计算字符串长度
+int strlen(const char *s) {
+  int n;
+  for(n = 0; s[n]; n++)
+    ;
+  return n;
+}
+
+// strncpy: 拷贝字符串，最多 n 个
+char* strncpy(char *s, const char *t, int n) {
+  char *os = s;
+  while(n-- > 0 && (*s++ = *t++) != 0)
+    ;
+  while(n-- > 0)
+    *s++ = 0;
+  return os;
+}
+
+// safestrcpy: 保证以 \0 结尾的字符串拷贝
+char* safestrcpy(char *s, const char *t, int n) {
+  char *os = s;
+  if(n <= 0)
+    return os;
+  while(--n > 0 && (*s++ = *t++) != 0)
+    ;
+  *s = 0;
+  return os;
+}

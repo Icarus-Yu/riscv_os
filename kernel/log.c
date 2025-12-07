@@ -6,7 +6,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "console.h" // 确保包含 panic 定义
-
+#include "string.h"
 // 简单的日志结构
 struct logheader {
   int n;
@@ -49,7 +49,7 @@ static void install_trans(int recovering) {
     memmove(dbuf->data, lbuf->data, BSIZE);
     bwrite(dbuf);  // 写入实际位置
     if(!recovering) 
-        bpin(dbuf); // 模拟 xv6 的 bpin (虽简化版可能未实现 bpin，暂留空或忽略)
+       // bpin(dbuf); // 模拟 xv6 的 bpin (虽简化版可能未实现 bpin，暂留空或忽略)
     brelse(lbuf);
     brelse(dbuf);
   }

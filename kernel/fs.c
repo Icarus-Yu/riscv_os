@@ -172,7 +172,7 @@ int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n) {
 
 // 路径解析 (最简版，只支持根目录下的文件查找)
 struct inode* namei(char *path) {
-  char name[DIRSIZ];
+  //char name[DIRSIZ];
   struct inode *dp;
   struct dirent de;
   
