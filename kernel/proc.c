@@ -67,6 +67,12 @@ found:
     // ret 会跳转到 ra 寄存器指向的地址
     // 我们将其指向一个“进程入口”函数
     p->context.ra = (uint64_t)proc_entry_point;
+    // 新增：初始化新字段
+    p->parent = 0;
+    p->chan = 0;
+    p->killed = 0;
+    p->xstate = 0;
+    p->sz = 0;
 
     printf("allocproc: Created PID %d, kstack at %p\n", p->pid, p->kstack);
     return p;
@@ -166,5 +172,124 @@ void create_test_proc(void) {
     if(p) {
         // 设置为可运行，等待调度器挑选
         p->state = RUNNABLE;
+    }
+}
+// --- 新增的核心函数 ---
+
+// Fork: 创建新进程
+int fork(void) {
+    int pid;
+    struct proc *np;
+    struct proc *p = current_proc;
+
+    // 1. 分配新进程
+    if((np = allocproc()) == 0){
+        return -1;
+    }
+
+    // 2. 复制 Trapframe (复制父进程的寄存器状态)
+    *(np->trapframe) = *(p->trapframe);
+
+    // 3. 子进程的返回值 a0 必须为 0
+    np->trapframe->a0 = 0;
+
+    // 4. 复制其他属性
+    np->parent = p;
+    np->sz = p->sz; // 暂时只复制大小，实际应复制内存内容(uvmcopy)
+
+    pid = np->pid;
+    np->state = RUNNABLE;
+
+    printf("[fork] Process %d forked child %d\n", p->pid, pid);
+    return pid;
+}
+
+// Exit: 退出当前进程
+void exit(int status) {
+    struct proc *p = current_proc;
+    
+    if(p == 0) return;
+
+    // 1. 记录退出状态
+    p->xstate = status;
+    p->state = ZOMBIE; // 变为僵尸状态，不被调度，等待 wait 回收
+
+    // 2. 如果有父进程在 wait 中睡眠，唤醒它
+    if(p->parent) {
+        wakeup(p->parent); 
+    }
+
+    printf("[exit] Process %d exited with status %d\n", p->pid, status);
+
+    // 3. 永久让出 CPU，跳转到调度器
+    swtch(&p->context, &scheduler_context);
+}
+
+// Wait: 等待子进程退出
+int wait(uint64_t addr) {
+    struct proc *pp;
+    int havekids, pid;
+    struct proc *p = current_proc;
+
+    for(;;){
+        // 扫描进程表查找我的子进程
+        havekids = 0;
+        for(pp = proc; pp < &proc[NPROC]; pp++){
+            if(pp->parent == p){
+                havekids = 1;
+                // 找到一个僵尸子进程
+                if(pp->state == ZOMBIE){
+                    pid = pp->pid;
+                    
+                    // 这里应该把 exit status 拷贝到用户提供的 addr
+                    // copyout(..., addr, &pp->xstate, ...);
+                    
+                    // 回收资源
+                    kfree((void*)pp->kstack);
+                    pp->kstack = 0;
+                    kfree((void*)pp->trapframe);
+                    pp->trapframe = 0;
+                    pp->pid = 0;
+                    pp->parent = 0;
+                    pp->state = UNUSED;
+                    
+                    return pid;
+                }
+            }
+        }
+
+        // 如果没有子进程，立即返回
+        if(!havekids){
+            return -1;
+        }
+
+        // 有子进程但都在运行，进入睡眠，等待它们调用 exit 唤醒我
+        sleep(p, 0); 
+    }
+}
+
+// Sleep: 进程休眠
+void sleep(void *chan, void *lk) {
+    struct proc *p = current_proc;
+    
+    if(p == 0) return;
+
+    p->chan = chan;
+    p->state = SLEEPING;
+
+    // 切换到调度器
+    swtch(&p->context, &scheduler_context);
+
+    // 醒来后清理
+    p->chan = 0;
+}
+
+// Wakeup: 唤醒休眠在 chan 上的进程
+void wakeup(void *chan) {
+    struct proc *p;
+    for(p = proc; p < &proc[NPROC]; p++) {
+        if(p->state == SLEEPING && p->chan == chan) {
+            p->state = RUNNABLE;
+        }
     }
 }

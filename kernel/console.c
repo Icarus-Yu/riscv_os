@@ -6,3 +6,19 @@
 void consputc(char c) {
     uart_putc(c);
 }
+
+extern int uart_getc(void);
+
+// 新增：控制台读取函数 (阻塞式)
+// 在本次实验中，我们用简单的轮询来实现阻塞读取
+int consgetc(void) {
+    int c;
+    while(1) {
+        c = uart_getc();
+        if(c != -1) {
+            return c;
+        }
+        // 在实际 OS 中，这里应该让进程 sleep 等待中断
+        // 但为了简化实验 6，我们暂时使用忙等待
+    }
+}

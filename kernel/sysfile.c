@@ -5,8 +5,9 @@
 //文件处理相关
 
 // 引用 syscall.c 中的 argint
-int argint(int n, int *ip);
-
+extern int argint(int n, int *ip);
+extern int argaddr(int n, uint64_t *ip);
+extern int consgetc(void);
 // 写文件系统调用
 // 参数: fd (a0), buf (a1), count (a2)
 int sys_write(void) {
@@ -28,6 +29,31 @@ int sys_write(void) {
         char *s = (char *)p;
         for (int i = 0; i < n; i++) {
             consputc(s[i]);
+        }
+        return n;
+    }
+    return -1;
+}
+
+// 新增：sys_read
+int sys_read(void) {
+    int fd;
+    int n;
+    uint64_t p;
+
+    if (argint(0, &fd) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
+        return -1;
+
+    // 目前只支持从标准输入 (fd=0) 读取
+    if (fd == 0) {
+        char *buf = (char *)p;
+        for(int i = 0; i < n; i++) {
+            int c = consgetc(); // 读取字符
+            buf[i] = c;
+            consputc(c); // 回显字符
+            if(c == '\n' || c == '\r') {
+                return i + 1; // 遇到换行符提前返回
+            }
         }
         return n;
     }

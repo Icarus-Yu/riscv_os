@@ -10,6 +10,15 @@ void* memset(void *dst, int c, uint64_t n) {
     }
     return dst;
 }
+// --- 新增 memcpy 实现 ---
+void* memcpy(void *dst, const void *src, uint64_t n) {
+    const char *s = src;
+    char *d = dst;
+    while (n-- > 0) {
+        *d++ = *s++;
+    }
+    return dst;
+}
 // 静态辅助函数声明
 static void printint(long long xx, int base, int sign);
 static void printptr(unsigned long long x);
