@@ -3,7 +3,7 @@
 #define __PROC_H__
 
 #include "riscv.h" // 需要 riscv.h 中的类型定义，例如 uint64_t
-
+#include"param.h"
 // 进程状态
 enum procstate {
     UNUSED,   // 未使用
@@ -98,6 +98,8 @@ struct proc {
     int xstate;             // 退出状态码 (exit status)
     uint64_t sz;            // 进程内存大小
     char name[16];
+    struct file *ofile[NOFILE];  // Open files
+    struct inode *cwd;           // Current directory
 };
 
 // --- proc.c 中的函数原型 ---
