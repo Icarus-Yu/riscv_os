@@ -3,67 +3,50 @@
 #include "console.h"
 #include "memory.h"
 #include "trap.h"
-#include "proc.h" // <--- 1. 包含新的头文件
-#include "buf.h"  // <--- 1. 新增：引入 buf.h 以修复 binit 报错
+#include "proc.h"
+#include "buf.h" 
 
-// <--- 2. 新增：手动声明磁盘驱动初始化函数
+// 手动声明未在头文件中暴露的初始化函数
 void virtio_disk_init(void);
+
 void main() {
+    // 1. 基础 UI 初始化
     clear_screen();
-    trapinit();
-    timerinit();
-    intr_on();
     printf("====== RISC-V OS Booting ======\n");
 
-    printf("\n====== Experiment 2: Printf Test ======\n");
-    printf("Testing integer: %d\n", 12345);
-    printf("Testing negative: %d\n", -54321);
-    printf("Testing hex: 0x%x\n", 0xABCD);
-    printf("Testing string: %s\n", "Hello, OS!");
-    printf("Testing pointer: %p\n", (void*)0x80200000);
+    // 2. 内存管理初始化 (物理内存 -> 内核页表 -> 开启分页)
+    printf("[Boot] Initializing Memory...\n");
+    kinit();         // 物理内存分配器
+    kvminit();       // 创建内核页表
+    kvminithart();   // 开启分页机制 (写入 satp)
+    printf_color(COLOR_GREEN, " - Memory initialized.\n");
 
-    printf("\n====== Experiment 3: Memory Management ======\n");
-    kinit();
-    kvminit();
-    kvminithart();
-    printf_color(COLOR_GREEN, "Virtual memory enabled!\n");
+    // 3. 中断与时钟初始化
+    printf("[Boot] Initializing Interrupts...\n");
+    trapinit();      // 设置中断向量
+    timerinit();     // 设置时钟中断
+    printf_color(COLOR_GREEN, " - Interrupts initialized.\n");
 
-    printf("\n====== Experiment 4: Interrupt & Timer ======\n");
-    trapinit();
-    timerinit();
-
-    intr_on();
-    printf_color(COLOR_YELLOW, "Interrupts enabled! Waiting for timer...\n\n");
-printf("\n====== Experiment 7: File System ======\n");
-    
-    // 初始化文件系统底层
+    // 4. 文件系统与设备初始化 (实验 7 新增)
+    printf("[Boot] Initializing File System...\n");
     virtio_disk_init(); // 初始化磁盘驱动
-    binit();            // 初始化缓冲区
-    procinit();
-    // ----------------------------------------------------
-    // <--- 2. 新增实验五的初始化调用 ---
-   printf("\n====== Experiment 5: Process & Scheduling ======\n");
-    procinit();
+    binit();            // 初始化缓冲区缓存
+    // iinit();         // (可选) 如果你实现了 inode 缓存初始化，可以在这里调用
+    printf_color(COLOR_GREEN, " - File System initialized.\n");
 
-    //create_test_proc(); // 创建第一个测试进程 (PID 1)
-    //create_test_proc(); // 创建第二个测试进程 (PID 2)
-    //// ----------------------------------------------------
+    // 5. 进程管理初始化
+    printf("[Boot] Initializing Process Manager...\n");
+    procinit();      // 初始化进程表
+    userinit();      // 创建第一个用户进程 (initcode)
+    printf_color(COLOR_GREEN, " - First user process created.\n");
 
-    // ----------------------------------------------------
-    // <--- 3. 替换 while(1) ---
-    // main 函数的使命结束，将控制权交给调度器
-    // scheduler() 函数将永不返回
-    printf("\n====== Experiment 6: System Call Verification ======\n");
-    // 创建第一个用户进程
-    userinit(); 
-    // --- 修改结束 ---
-    scheduler();
-    // ----------------------------------------------------
-   
+    // 6. 开启中断并启动调度器
+    printf("[Boot] System Ready. Handing over to scheduler...\n");
+    printf("---------------------------------------------\n");
     
-    // 下面的代码将永远不会被执行
-    printf("System is now running. Timer interrupts will be displayed below:\n");
-    printf("----------------------------------------\n");
-    while (1) {
-    }
+    intr_on();       // 开启全局中断
+    scheduler();     // 进入调度循环 (永不返回)
+
+    // 7. 死循环 (防御性编程，理论上永远不会执行到这里)
+    panic("main: scheduler returned");
 }
