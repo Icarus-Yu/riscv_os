@@ -26,6 +26,10 @@ extern void end_op(void);
 // --- 新增下面这两个函数原型声明 ---
 int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
 int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
+void iupdate(struct inode *ip);
+void iunlock(struct inode *ip);
+void itrunc(struct inode *ip);
+static void bfree(int dev, uint b);
 // 内存中的 Inode 缓存
 struct {
   struct spinlock lock;
@@ -43,6 +47,13 @@ void iinit() {
 }
 
 static struct inode* iget(uint dev, uint inum);
+struct inode* idup(struct inode *ip) {
+  if(ip == 0) return 0;
+  acquire(&icache.lock);
+  ip->ref++;
+  release(&icache.lock);
+  return ip;
+}
 
 // 分配一个新的 inode
 struct inode* ialloc(uint dev, short type) {
@@ -101,13 +112,29 @@ void ilock(struct inode *ip) {
 }
 
 // 释放 inode 内存引用
+// 释放 inode 内存引用 (完善版)
 void iput(struct inode *ip) {
   acquire(&icache.lock);
 
   if(ip->ref == 1 && ip->valid && ip->nlink == 0){
-    // 文件已被删除且无引用，应该释放磁盘空间
-    // 这里简化，暂不实现 truncate
+    // 如果没有引用且链接数为0，说明文件已被删除
+    // 需要释放其占用的磁盘块
+    
+    // 必须释放锁，因为 itrunc -> bread 会睡眠
+    release(&icache.lock);
+
+    // 假设调用者（如 sys_unlink）已经开启了事务
+    // 或者 iput 被 fileclose 调用时也开启了事务
+    // 这里我们直接进行操作
+    
+    ilock(ip);
+    itrunc(ip); // <--- 这里调用了 itrunc，从而使用了 bfree
+    ip->type = 0;
+    iupdate(ip);
     ip->valid = 0;
+    iunlock(ip);
+
+    acquire(&icache.lock);
   }
 
   ip->ref--;
@@ -179,34 +206,34 @@ void iunlock(struct inode *ip) {
 // }
 
 // 路径解析 (最简版，只支持根目录下的文件查找)
-struct inode* namei(char *path) {
-  //char name[DIRSIZ];
-  struct inode *dp;
-  struct dirent de;
+// struct inode* namei(char *path) {
+//   //char name[DIRSIZ];
+//   struct inode *dp;
+//   struct dirent de;
   
-  if(*path == '/') path++;
+//   if(*path == '/') path++;
   
-  // 硬编码：只支持根目录
-  dp = iget(1, ROOTINO); // dev 1, root inode
-  ilock(dp);
+//   // 硬编码：只支持根目录
+//   dp = iget(1, ROOTINO); // dev 1, root inode
+//   ilock(dp);
 
-  // 遍历目录项
-  for(uint off=0; off<dp->size; off+=sizeof(de)){
-    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
-      break;
-    if(de.inum == 0) continue;
-    if(strncmp(path, de.name, DIRSIZ) == 0){
-      // Found
-      iunlock(dp);
-      // iput(dp); // Don't put root yet
-      return iget(dp->dev, de.inum);
-    }
-  }
+//   // 遍历目录项
+//   for(uint off=0; off<dp->size; off+=sizeof(de)){
+//     if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+//       break;
+//     if(de.inum == 0) continue;
+//     if(strncmp(path, de.name, DIRSIZ) == 0){
+//       // Found
+//       iunlock(dp);
+//       // iput(dp); // Don't put root yet
+//       return iget(dp->dev, de.inum);
+//     }
+//   }
   
-  iunlock(dp);
-  iput(dp);
-  return 0;
-}
+//   iunlock(dp);
+//   iput(dp);
+//   return 0;
+// }
 
 // 将 inode 元数据写回磁盘
 void iupdate(struct inode *ip) {
@@ -234,31 +261,34 @@ void iupdate(struct inode *ip) {
 }
 
 // 释放磁盘块（简化的 bitmap 操作，暂未实现 balloc/bfree，这里仅占位）
-// 完整文件系统需要实现 balloc/bfree 来管理数据块位图
-// static void bfree(int dev, uint b) {
-//   struct buf *bp;
-//   struct superblock sb;
-//   int bi, m;
+// 释放磁盘块
+static void bfree(int dev, uint b) {
+  struct buf *bp;
+  struct superblock sb;
+  int bi, m;
 
-//   // 读取超级块
-//   bp = bread(dev, 1);
-//   memmove(&sb, bp->data, sizeof(sb));
-//   brelse(bp);
+  // 1. 读取超级块以获取布局信息
+  bp = bread(dev, 1);
+  memmove(&sb, bp->data, sizeof(sb));
+  brelse(bp);
 
-//   // 读取对应的位图块
-//   bp = bread(dev, BBLOCK(b, sb));
-//   bi = b % BPB;
-//   m = 1 << (bi % 8);
+  // 2. 读取对应的位图块
+  // BBLOCK 宏计算块 b 对应的位图块号
+  bp = bread(dev, BBLOCK(b, sb));
+  bi = b % BPB;      // 在该位图块内的位索引
+  m = 1 << (bi % 8); // 对应的掩码
+
+  // 3. 检查是否已经是空闲的 (防止重复释放)
+  if((bp->data[bi/8] & m) == 0)
+    panic("freeing free block");
+
+  // 4. 标记为 0 (空闲)
+  bp->data[bi/8] &= ~m;
   
-//   // 检查是否已经是空闲的
-//   if((bp->data[bi/8] & m) == 0)
-//     panic("freeing free block");
-  
-//   // 标记为 0 (空闲)
-//   bp->data[bi/8] &= ~m;
-//   log_write(bp);
-//   brelse(bp);
-// }
+  // 5. 记录日志并释放缓存
+  log_write(bp);
+  brelse(bp);
+}
 
 // 将块 b 的内容清零 (分配新块时必须清零，防止读取到垃圾数据)
 static void bzero(int dev, int bno) {
@@ -352,6 +382,38 @@ static uint bmap(struct inode *ip, uint bn) {
   panic("bmap: out of range");
   return 0;
 }
+// 将 inode 的内容截断（清空）
+// 调用者必须持有 ip->lock
+void itrunc(struct inode *ip) {
+  int i, j;
+  struct buf *bp;
+  uint *a;
+
+  // 1. 释放直接块
+  for(i = 0; i < NDIRECT; i++){
+    if(ip->addrs[i]){
+      bfree(ip->dev, ip->addrs[i]);
+      ip->addrs[i] = 0;
+    }
+  }
+
+  // 2. 释放间接块
+  if(ip->addrs[NDIRECT]){
+    bp = bread(ip->dev, ip->addrs[NDIRECT]);
+    a = (uint*)bp->data;
+    for(j = 0; j < NINDIRECT; j++){
+      if(a[j])
+        bfree(ip->dev, a[j]);
+    }
+    brelse(bp);
+    bfree(ip->dev, ip->addrs[NDIRECT]);
+    ip->addrs[NDIRECT] = 0;
+  }
+
+  // 3. 更新大小并写回磁盘
+  ip->size = 0;
+  iupdate(ip);
+}
 
 // 完善 readi: 使用 bmap 读取数据
 int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n) {
@@ -413,4 +475,154 @@ int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n) {
 void iunlockput(struct inode *ip) {
   iunlock(ip);
   iput(ip);
+}
+
+
+// 在目录 dp 中查找名为 name 的文件
+// 如果找到，返回该文件的 inode (已 iget)，并设置 *poff 为目录项偏移量
+struct inode* dirlookup(struct inode *dp, char *name, uint *poff) {
+  uint off, inum;
+  struct dirent de;
+
+  if(dp->type != T_DIR)
+    panic("dirlookup not DIR");
+
+  // 遍历目录数据块
+  for(off = 0; off < dp->size; off += sizeof(de)){
+    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlookup read");
+    
+    if(de.inum == 0)
+      continue;
+      
+    // 比较文件名 (需要 string.h 中的 strncmp)
+    if(strncmp(name, de.name, DIRSIZ) == 0){
+      // 找到了！
+      if(poff)
+        *poff = off;
+      inum = de.inum;
+      return iget(dp->dev, inum);
+    }
+  }
+
+  return 0; // 没找到
+}
+
+
+// 将 (name, inum) 写入目录 dp
+int dirlink(struct inode *dp, char *name, uint inum) {
+  int off;
+  struct dirent de;
+  struct inode *ip;
+
+  // 1. 检查文件名是否已存在
+  if((ip = dirlookup(dp, name, 0)) != 0){
+    iput(ip);
+    return -1;
+  }
+
+  // 2. 寻找空的目录项槽位
+  for(off = 0; off < dp->size; off += sizeof(de)){
+    if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      panic("dirlink read");
+    if(de.inum == 0)
+      break;
+  }
+
+  // 3. 写入新的目录项
+  strncpy(de.name, name, DIRSIZ);
+  de.inum = inum;
+  if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+    panic("dirlink");
+
+  return 0;
+}
+
+// 辅助函数：从路径中提取下一个元素
+// 例如：path="/a/b", name="a", 返回 path="/b"
+static char* skipelem(char *path, char *name) {
+  char *s;
+  int len;
+
+  while(*path == '/')
+    path++;
+  if(*path == 0)
+    return 0;
+  
+  s = path;
+  while(*path != '/' && *path != 0)
+    path++;
+  
+  len = path - s;
+  if(len >= DIRSIZ)
+    memmove(name, s, DIRSIZ);
+  else {
+    memmove(name, s, len);
+    name[len] = 0;
+  }
+  
+  while(*path == '/')
+    path++;
+  return path;
+}
+
+// 核心路径查找函数
+// 如果 nameiparent 为真，则返回路径中最后一个元素的父目录 inode，并将最后一个元素名复制到 name
+// 如果 nameiparent 为假，则返回路径中最后一个元素的 inode
+static struct inode* namex(char *path, int nameiparent, char *name) {
+  struct inode *ip, *next;
+
+  // 1. 确定起始目录
+  if(*path == '/')
+    ip = iget(ROOTDEV, ROOTINO); // 绝对路径，从根目录开始
+  else
+    ip = idup(current_proc->cwd); // 相对路径，从当前工作目录开始 (需在 proc.h 中确认 cwd 字段)
+
+  while((path = skipelem(path, name)) != 0){
+    // 2. 锁定当前目录 inode
+    ilock(ip);
+
+    // 3. 检查是否为目录
+    if(ip->type != T_DIR){
+      iunlockput(ip);
+      return 0;
+    }
+
+    // 4. 如果是查找父目录，且已到达最后一个元素，则停止
+    if(nameiparent && *path == '\0'){
+      iunlock(ip); // 返回锁定的 inode (但不持有锁，由调用者处理? xv6通常返回解锁的inode或上锁的? 
+                   // xv6标准：nameiparent返回unlock的inode, namei返回locked的inode?
+                   // 纠正：xv6 namex 返回的 ip 是解锁的 (iget状态)，调用者决定是否 lock。
+                   // 但为了方便，我们通常在循环里 lock check 之后 unlock。
+                   // 这里的逻辑：Stop one level early.
+      return ip;
+    }
+
+    // 5. 在目录中查找下一级
+    if((next = dirlookup(ip, name, 0)) == 0){
+      iunlockput(ip);
+      return 0;
+    }
+
+    iunlockput(ip); // 释放当前级，移动到下一级
+    ip = next;
+  }
+
+  if(nameiparent){
+    iput(ip);
+    return 0;
+  }
+
+  return ip;
+}
+
+// 外部接口：解析路径，返回对应的 inode
+struct inode* namei(char *path) {
+  char name[DIRSIZ];
+  return namex(path, 0, name);
+}
+
+// 外部接口：解析路径，返回父目录 inode，并将文件名填入 name
+struct inode* nameiparent(char *path, char *name) {
+  return namex(path, 1, name);
 }

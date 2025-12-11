@@ -13,7 +13,9 @@ struct context scheduler_context; // 调度器自己的上下文
 static int nextpid = 1; // 下一个进程ID
 extern char etext[]; // 声明链接脚本中的符号
 extern int mappages(pagetable_t pagetable, uint64_t va, uint64_t size, uint64_t pa, int perm);
+struct inode* namei(char* path);
 // 1. 定义 initcode 机器码
+
 // 这段汇编对应：write(1, "Hello, Syscall!\n", 16); exit(0);
 uchar initcode[] = {
     // 1. li a0, 1 (stdout)
@@ -375,51 +377,39 @@ void wakeup(void *chan) {
 void userinit(void) {
   struct proc *p;
 
-  // 分配一个进程结构体
   p = allocproc();
   
-  // 这里的 current_proc = p 是为了应对有些内存分配函数可能需要“当前进程”上下文
-  // 但在早期启动阶段其实不是严格必须，为了保险起见可以保留
-  current_proc = p; 
+  // 【删除】不要在这里设置 current_proc，否则 namei 导致 sleep 会崩溃
+  // current_proc = p; 
 
-  // 分配一个物理页来存放用户代码
+  // 分配物理页存放用户代码
   char *mem = kalloc();
-  if(mem == 0) {
-      panic("userinit: kalloc failed");
-  }
+  if(mem == 0) panic("userinit: kalloc failed");
   memset(mem, 0, PGSIZE);
   
-  // 将 initcode 机器码拷贝到这个物理页中
-  // 注意：initcode 很小，一定小于一页 (4096字节)
+  // 拷贝 initcode
   for(int i = 0; i < sizeof(initcode); i++){
       mem[i] = initcode[i];
   }
 
-  // 关键步骤：建立用户页表映射
-  // 将虚拟地址 0 映射到物理地址 mem，权限为 R/W/X/U
-  // 注意：用户态代码必须有 PTE_U 权限才能执行
+  // 建立映射
   if(mappages(p->pagetable, 0, PGSIZE, (uint64)mem, PTE_W|PTE_R|PTE_X|PTE_U) != 0){
       panic("userinit: mappages failed");
   }
 
-  // 设置进程大小为一页
   p->sz = PGSIZE;
-
-  // 设置 Trapframe 中的状态
-  // EPC (Exception Program Counter): 用户程序从虚拟地址 0 开始执行
   p->trapframe->epc = 0;      
-  // SP (Stack Pointer): 用户栈顶设为一页的末尾 (4096)
   p->trapframe->sp = PGSIZE;  
 
-  // 设置进程名称 (使用 memcpy 替代 safestrcpy)
-  // "initcode" 长度为 8，拷贝 9 字节包含 '\0'
+  // 【新增】设置当前目录为根目录
+  // 此时 current_proc 为 0，磁盘驱动会使用轮询模式，安全！
+  p->cwd = namei("/"); 
+
   memcpy(p->name, "initcode", 9);
-  
-  // 将进程状态设为 RUNNABLE，这样调度器就能调度它了
   p->state = RUNNABLE;
 
-  // 恢复 current_proc
-  current_proc = 0;
+  // 【删除】
+  // current_proc = 0;
   
   printf("userinit: created first user process\n");
 }
