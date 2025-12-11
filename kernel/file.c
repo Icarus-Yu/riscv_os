@@ -8,7 +8,20 @@
 #include "proc.h"
 #include "console.h"
 #include "string.h"  // for memset
+#include "stat.h"
+// --- 手动添加外部函数声明 ---
 
+// 来自 kernel/fs.c
+void begin_op(void);
+void end_op(void);
+void ilock(struct inode *ip);
+void iunlock(struct inode *ip);
+void iput(struct inode *ip);
+int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
+int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
+
+// 来自 kernel/mm/vm.c (用于 filestat)
+int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len);
 struct devsw devsw[NDEV];
 
 struct {
@@ -129,49 +142,25 @@ int filewrite(struct file *f, uint64 addr, int n) {
     return -1;
 
   if(f->type == FD_PIPE){
-    // return pipewrite(f->pipe, addr, n);
+    // ...
     return -1;
   } else if(f->type == FD_DEVICE){
     if(f->major < 0 || f->major >= NDEV || !devsw[f->major].write)
       return -1;
     return devsw[f->major].write(1, addr, n);
   } else if(f->type == FD_INODE){
-    // 写入文件的最大限制
-    /*
-    int max = ((MAXOPBLOCKS-1-1-2) / 2) * BSIZE;
-    int i = 0;
-    while(i < n){
-      int n1 = n - i;
-      if(n1 > max)
-        n1 = max;
-
-      begin_op();
-      ilock(f->ip);
-      if ((r = writei(f->ip, 1, addr + i, f->off, n1)) > 0)
-        f->off += r;
-      iunlock(f->ip);
-      end_op();
-
-      if(r != n1){
-        // error from writei
-        break;
-      }
-      i += r;
-    }
-    ret = (i == n ? n : -1);
-    */
-    // 为了简化，我们暂时只实现一次写入，暂不处理超大文件分片
+    // 使用事务保护写操作
     begin_op();
     ilock(f->ip);
-    // 需要在 fs.c 实现 writei
-    // if ((r = writei(f->ip, 1, addr, f->off, n)) > 0)
-    //   f->off += r;
-    // 暂时用 printf 替代，稍后补全 writei
-    printf("filewrite: writei not implemented yet\n");
-    r = n; // 假装写入成功
+    
+    // 调用 fs.c 中的 writei
+    if ((r = writei(f->ip, 0, addr, f->off, n)) > 0)
+      f->off += r;
+    
+    ret = r;
+    
     iunlock(f->ip);
     end_op();
-    ret = r;
   } else {
     panic("filewrite");
   }

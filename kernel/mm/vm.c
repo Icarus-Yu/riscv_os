@@ -134,3 +134,30 @@ void freewalk(pagetable_t pagetable) {
   if (pagetable) 
       kfree((void*)pagetable);
 }
+int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
+  uint64 n, va0, pa0;
+  pte_t *pte;
+
+  while(len > 0){
+    va0 = PGROUNDDOWN(dstva);
+    //if(va0 >=(1L << 38) - 1) // MAXVA 需要在 riscv.h 中定义，通常是 (1L << (39-1)) - 1
+      //return -1;
+      
+    pte = walk(pagetable, va0, 0);
+    if(pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1;
+      
+    pa0 = PTE2PA(*pte);
+    n = PGSIZE - (dstva - va0);
+    if(n > len)
+      n = len;
+      
+    // 直接物理内存拷贝
+    memmove((void*)(pa0 + (dstva - va0)), src, n);
+
+    len -= n;
+    src += n;
+    dstva = va0 + PGSIZE;
+  }
+  return 0;
+}

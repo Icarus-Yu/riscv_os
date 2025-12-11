@@ -5,9 +5,46 @@
 #include "trap.h"
 #include "proc.h"
 #include "buf.h" 
-
+#include "fs.h"
+#include "file.h"   // 提供 struct inode 定义
+#include "stat.h"   // 提供 T_FILE 定义
+#include "string.h" // 提供 memset 定义
+#include "param.h"  // 提供 ROOTDEV 等定义
 // 手动声明未在头文件中暴露的初始化函数
 void virtio_disk_init(void);
+struct inode* ialloc(uint dev, short type);
+void iupdate(struct inode *ip);
+int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
+
+// 来自 kernel/log.c
+void begin_op(void);
+void end_op(void);
+void test_large_file() {
+    printf("=== Testing Large File ===\n");
+    
+    // 1. 获取一个空闲 Inode
+    struct inode *ip = ialloc(ROOTDEV, T_FILE); 
+    
+    char buf[BSIZE];
+    memset(buf, 'A', BSIZE);
+    
+    // 【关键修复】拆分事务：每次只写 1 个块 (1KB)
+    // 这样每个 begin_op/end_op 只涉及 1个数据块+1个位图块+1个inode块 < 10 (MAX)
+    for(int i = 0; i < 16; i++) {
+        begin_op();
+        writei(ip, 0, (uint64)buf, i * BSIZE, BSIZE);
+        iupdate(ip); // 更新 inode 大小
+        end_op();
+        printf("."); // 打印进度点
+    }
+    printf("\n");
+    
+    printf("Large file size: %d bytes (Expected 16384)\n", ip->size);
+    if(ip->size == 16384) 
+        printf("PASS: Large file write success!\n");
+    else 
+        printf("FAIL: Size mismatch.\n");
+}
 
 void main() {
     // 1. 基础 UI 初始化
@@ -33,13 +70,39 @@ void main() {
     binit();            // 初始化缓冲区缓存
     // iinit();         // (可选) 如果你实现了 inode 缓存初始化，可以在这里调用
     printf_color(COLOR_GREEN, " - File System initialized.\n");
-
+    test_large_file();
     // 5. 进程管理初始化
     printf("[Boot] Initializing Process Manager...\n");
     procinit();      // 初始化进程表
     userinit();      // 创建第一个用户进程 (initcode)
     printf_color(COLOR_GREEN, " - First user process created.\n");
-
+    // 测试代码：写入一个超过 12KB 的文件，触发间接块分配
+// void test_large_file()
+// {
+//     printf("=== Testing Large File ===\n");
+    
+//     // 1. 获取一个空闲 Inode (模拟 create)
+//     struct inode *ip = ialloc(ROOTDEV, T_FILE); 
+    
+//     // 2. 写入数据 (超过 12个直接块，即 > 12 * 1024 字节)
+//     // 假设写入 16KB
+//     char buf[BSIZE];
+//     memset(buf, 'A', BSIZE);
+    
+//     begin_op();
+//     for(int i = 0; i < 16; i++) {
+//         // 每次写入 1KB
+//         writei(ip, 0, (uint64)buf, i * BSIZE, BSIZE);
+//     }
+//     iupdate(ip);
+//     end_op();
+    
+//     printf("Large file size: %d bytes (Expected 16384)\n", ip->size);
+//     if(ip->size == 16384) 
+//         printf("PASS: Large file write success!\n");
+//     else 
+//         printf("FAIL: Size mismatch.\n");
+// }
     // 6. 开启中断并启动调度器
     printf("[Boot] System Ready. Handing over to scheduler...\n");
     printf("---------------------------------------------\n");

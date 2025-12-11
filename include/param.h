@@ -8,5 +8,5 @@
 #define NINODE       50  // Inode 缓存的最大数量
 #define NDEV         10  // 最大设备号
 #define ROOTDEV       1  // 根文件系统设备号
-
+#define MAXPATH     128 // 最大路径长度
 #endif
