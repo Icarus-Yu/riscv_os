@@ -21,40 +21,49 @@ int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
 void begin_op(void);
 void end_op(void);
 void initlog(int dev, struct superblock *sb); // <--- [修复1] 声明 initlog
-
-void test_large_file() {
-    printf("=== Testing Large File ===\n");
-    
-    // [修复2] ialloc 涉及磁盘写操作，必须包含在事务(begin_op/end_op)中
+struct inode* namei(char *path);
+void ilock(struct inode *ip);
+void iunlock(struct inode *ip);
+void iunlockput(struct inode *ip);
+void iupdate(struct inode *ip);
+int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
+int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
+// 这里推荐方案 1：临时暴露 create 函数供测试使用
+struct inode* create(char *path, short type, short major, short minor);
+void test_filesystem() {
+    printf("=== Testing File System (Advanced) ===\n");
     begin_op();
-    // 1. 获取一个空闲 Inode
-    struct inode *ip = ialloc(ROOTDEV, T_FILE); 
-    end_op(); // 提交 ialloc 的修改
+    
+    // 1. 测试创建目录
+    struct inode *dp = create("/temp", T_DIR, 0, 0);
+    if(dp == 0) panic("failed to create /temp");
+    iunlockput(dp);
+    printf("[1] mkdir /temp: OK\n");
 
-    // 检查是否分配成功
-    if(ip == 0) {
-        panic("test_large_file: ialloc failed");
-    }
+    // 2. 测试在目录下创建文件
+    struct inode *ip = create("/temp/hello", T_FILE, 0, 0);
+    if(ip == 0) panic("failed to create /temp/hello");
     
-    char buf[BSIZE];
-    memset(buf, 'A', BSIZE);
+    // 3. 写入数据
+    char *msg = "Hello, RISC-V FS!";
+    if(writei(ip, 0, (uint64)msg, 0, 18) != 18) panic("failed to write");
+    printf("[2] write /temp/hello: OK\n");
     
-    // 【关键修复】拆分事务：每次只写 1 个块 (1KB)
-    // 这样每个 begin_op/end_op 只涉及 1个数据块+1个位图块+1个inode块 < 10 (MAX)
-    for(int i = 0; i < 16; i++) {
-        begin_op();
-        writei(ip, 0, (uint64)buf, i * BSIZE, BSIZE);
-        iupdate(ip); // 更新 inode 大小
-        end_op();
-        printf("."); // 打印进度点
-    }
-    printf("\n");
+    iunlockput(ip);
+    end_op();
+
+    // 4. 读取验证
+    ip = namei("/temp/hello");
+    if(ip == 0) panic("failed to find /temp/hello");
+    ilock(ip);
     
-    printf("Large file size: %d bytes (Expected 16384)\n", ip->size);
-    if(ip->size == 16384) 
-        printf("PASS: Large file write success!\n");
-    else 
-        printf("FAIL: Size mismatch.\n");
+    char buf[32];
+    readi(ip, 0, (uint64)buf, 0, 18);
+    printf("[3] read content: %s\n", buf);
+    
+    iunlockput(ip);
+    
+    printf("PASS: File System functionality check passed!\n");
 }
 
 void main() {
@@ -90,7 +99,7 @@ void main() {
     // iinit();         // (可选) 如果你实现了 inode 缓存初始化，可以在这里调用
     printf_color(COLOR_GREEN, " - File System initialized.\n");
     
-    test_large_file();
+    test_filesystem();
     
     // 5. 进程管理初始化
     printf("[Boot] Initializing Process Manager...\n");

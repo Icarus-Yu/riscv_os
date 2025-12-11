@@ -13,6 +13,14 @@ extern int sys_fork(void);
 extern int sys_wait(void);
 extern int sys_sleep(void);
 
+// --- 【新增：补充缺失的系统调用声明】 ---
+extern int sys_open(void);
+extern int sys_close(void);
+extern int sys_mkdir(void);
+extern int sys_chdir(void);
+extern int sys_link(void);
+extern int sys_unlink(void);
+
 // 系统调用函数表
 static int (*syscalls[])(void) = {
     [SYS_write]   sys_write,
@@ -22,6 +30,13 @@ static int (*syscalls[])(void) = {
     [SYS_fork]    sys_fork,
     [SYS_wait]    sys_wait,
     [SYS_sleep]   sys_sleep,
+    // --- 新增 ---
+    [SYS_open]    sys_open,
+    [SYS_close]   sys_close,
+    [SYS_mkdir]   sys_mkdir,
+    [SYS_chdir]   sys_chdir,
+    [SYS_link]    sys_link,
+    [SYS_unlink]  sys_unlink,
 };
 
 // 辅助函数：获取第 n 个 int 类型参数
