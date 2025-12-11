@@ -10,6 +10,7 @@
 #include "stat.h"   // 提供 T_FILE 定义
 #include "string.h" // 提供 memset 定义
 #include "param.h"  // 提供 ROOTDEV 等定义
+
 // 手动声明未在头文件中暴露的初始化函数
 void virtio_disk_init(void);
 struct inode* ialloc(uint dev, short type);
@@ -19,11 +20,21 @@ int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
 // 来自 kernel/log.c
 void begin_op(void);
 void end_op(void);
+void initlog(int dev, struct superblock *sb); // <--- [修复1] 声明 initlog
+
 void test_large_file() {
     printf("=== Testing Large File ===\n");
     
+    // [修复2] ialloc 涉及磁盘写操作，必须包含在事务(begin_op/end_op)中
+    begin_op();
     // 1. 获取一个空闲 Inode
     struct inode *ip = ialloc(ROOTDEV, T_FILE); 
+    end_op(); // 提交 ialloc 的修改
+
+    // 检查是否分配成功
+    if(ip == 0) {
+        panic("test_large_file: ialloc failed");
+    }
     
     char buf[BSIZE];
     memset(buf, 'A', BSIZE);
@@ -68,41 +79,25 @@ void main() {
     printf("[Boot] Initializing File System...\n");
     virtio_disk_init(); // 初始化磁盘驱动
     binit();            // 初始化缓冲区缓存
+    
+    // [修复3] 初始化日志系统 (必须在 binit 之后，使用文件系统之前)
+    struct buf *bp = bread(ROOTDEV, 1); // 读取超级块 (Block 1)
+    struct superblock sb;
+    memmove(&sb, bp->data, sizeof(sb));
+    brelse(bp);
+    initlog(ROOTDEV, &sb); // 初始化日志
+    
     // iinit();         // (可选) 如果你实现了 inode 缓存初始化，可以在这里调用
     printf_color(COLOR_GREEN, " - File System initialized.\n");
+    
     test_large_file();
+    
     // 5. 进程管理初始化
     printf("[Boot] Initializing Process Manager...\n");
     procinit();      // 初始化进程表
     userinit();      // 创建第一个用户进程 (initcode)
     printf_color(COLOR_GREEN, " - First user process created.\n");
-    // 测试代码：写入一个超过 12KB 的文件，触发间接块分配
-// void test_large_file()
-// {
-//     printf("=== Testing Large File ===\n");
-    
-//     // 1. 获取一个空闲 Inode (模拟 create)
-//     struct inode *ip = ialloc(ROOTDEV, T_FILE); 
-    
-//     // 2. 写入数据 (超过 12个直接块，即 > 12 * 1024 字节)
-//     // 假设写入 16KB
-//     char buf[BSIZE];
-//     memset(buf, 'A', BSIZE);
-    
-//     begin_op();
-//     for(int i = 0; i < 16; i++) {
-//         // 每次写入 1KB
-//         writei(ip, 0, (uint64)buf, i * BSIZE, BSIZE);
-//     }
-//     iupdate(ip);
-//     end_op();
-    
-//     printf("Large file size: %d bytes (Expected 16384)\n", ip->size);
-//     if(ip->size == 16384) 
-//         printf("PASS: Large file write success!\n");
-//     else 
-//         printf("FAIL: Size mismatch.\n");
-// }
+
     // 6. 开启中断并启动调度器
     printf("[Boot] System Ready. Handing over to scheduler...\n");
     printf("---------------------------------------------\n");

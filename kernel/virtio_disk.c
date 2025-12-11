@@ -18,10 +18,11 @@
 #define VIRTIO_MMIO_VENDOR_ID           0x00c
 #define VIRTIO_MMIO_DEVICE_FEATURES     0x010
 #define VIRTIO_MMIO_DRIVER_FEATURES     0x020
+#define VIRTIO_MMIO_GUEST_PAGE_SIZE     0x028
 #define VIRTIO_MMIO_QUEUE_SEL           0x030
 #define VIRTIO_MMIO_QUEUE_NUM_MAX       0x034
 #define VIRTIO_MMIO_QUEUE_NUM           0x038
-#define VIRTIO_MMIO_QUEUE_READY         0x044
+//#define VIRTIO_MMIO_QUEUE_READY         0x044
 #define VIRTIO_MMIO_QUEUE_NOTIFY        0x050
 #define VIRTIO_MMIO_INTERRUPT_STATUS    0x060
 #define VIRTIO_MMIO_INTERRUPT_ACK       0x064
@@ -127,12 +128,13 @@ void virtio_disk_init(void) {
   status |= VIRTIO_CONFIG_S_FEATURES_OK;
   *R(VIRTIO_MMIO_STATUS) = status;
 
-  status |= VIRTIO_CONFIG_S_DRIVER_OK;
-  *R(VIRTIO_MMIO_STATUS) = status;
+  // check FEATURES_OK ... (Legacy 模式其实可选，但留着无妨)
 
   *R(VIRTIO_MMIO_QUEUE_SEL) = 0;
-  if(*R(VIRTIO_MMIO_QUEUE_READY))
-    panic("virtio disk should not be ready");
+
+  // 【移除】QueueReady 检查
+  // if(*R(VIRTIO_MMIO_QUEUE_READY))
+  //   panic("virtio disk should not be ready");
 
   uint32 max = *R(VIRTIO_MMIO_QUEUE_NUM_MAX);
   if(max == 0)
@@ -141,6 +143,10 @@ void virtio_disk_init(void) {
     panic("virtio disk max queue too short");
 
   *R(VIRTIO_MMIO_QUEUE_NUM) = NUM;
+
+  // 【新增2】 关键！告诉设备页大小是 4096
+  // 如果不写这个，QEMU 不知道如何计算 PFN 的物理地址
+  *R(VIRTIO_MMIO_GUEST_PAGE_SIZE) = PGSIZE;
 
   memset(disk.pages, 0, sizeof(disk.pages));
   
@@ -154,7 +160,13 @@ void virtio_disk_init(void) {
   for(int i = 0; i < NUM; i++)
     disk.free[i] = 1;
 
-  *R(VIRTIO_MMIO_QUEUE_READY) = 1;
+  // 【移除】QueueReady 写入
+  // *R(VIRTIO_MMIO_QUEUE_READY) = 1;
+
+  // 最后设置 DRIVER_OK
+  status |= VIRTIO_CONFIG_S_DRIVER_OK;
+  *R(VIRTIO_MMIO_STATUS) = status;
+
   printf("virtio_disk_init: disk initialized\n");
 }
 
@@ -254,7 +266,7 @@ void virtio_disk_rw(struct buf *b, int write) {
   __sync_synchronize();
 
   *R(VIRTIO_MMIO_QUEUE_NOTIFY) = 0; 
-
+  uint64_t cycle_count = 0;
   // 【关键修复】轮询/休眠混合模式
   while(b->disk == 1) {
     if(current_proc) {
@@ -265,6 +277,13 @@ void virtio_disk_rw(struct buf *b, int write) {
         release(&disk.vdisk_lock);
         virtio_disk_intr(); // 手动检查
         acquire(&disk.vdisk_lock);
+
+        // --- 调试代码开始 ---
+        cycle_count++;
+        if (cycle_count % 100000 == 0) {
+            printf("virtio_disk_rw: waiting... used_idx=%d, disk.used->idx=%d\n", 
+                   disk.used_idx, disk.used->idx);
+        }
     }
   }
 
