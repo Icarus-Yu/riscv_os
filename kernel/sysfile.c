@@ -394,3 +394,36 @@ int isdirempty(struct inode *dp) {
   }
   return 1;
 }
+
+
+// 【新增】实现 sys_dup
+int sys_dup(void) {
+  struct file *f;
+  int fd;
+
+  // 1. 获取参数：旧的文件描述符
+  if(argfd(0, 0, &f) < 0)
+    return -1;
+
+  // 2. 分配新的文件描述符
+  if((fd = fdalloc(f)) < 0)
+    return -1;
+
+  // 3. 增加文件引用计数
+  filedup(f);
+  
+  return fd;
+}
+
+// 【新增】实现 sys_fstat
+int sys_fstat(void) {
+  struct file *f;
+  uint64 st; // 用户态 struct stat 的地址
+
+  // 1. 获取参数：文件描述符 和 用户态缓冲区地址
+  if(argfd(0, 0, &f) < 0 || argaddr(1, &st) < 0)
+    return -1;
+  
+  // 2. 调用 file.c 中的 filestat 进行填充和拷贝
+  return filestat(f, st);
+}

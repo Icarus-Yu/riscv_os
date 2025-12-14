@@ -9,4 +9,5 @@
 #define NDEV         10  // 最大设备号
 #define ROOTDEV       1  // 根文件系统设备号
 #define MAXPATH     128 // 最大路径长度
+#define MAXARG       32  // 最大命令行参数数量
 #endif

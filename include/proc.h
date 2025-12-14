@@ -124,7 +124,8 @@ void exit(int status);
 int wait(uint64_t addr);
 void sleep(void *chan, void *lk); // lk 在单核简易版中可忽略，为了兼容性保留
 void wakeup(void *chan);
-
+pagetable_t proc_pagetable(struct proc *p);
+void proc_freepagetable(pagetable_t pagetable, uint64 sz); // exec.c 中也用到了这个，稍后可能需要实现
 // 外部变量
 extern struct proc *current_proc; // 当前运行的进程
 

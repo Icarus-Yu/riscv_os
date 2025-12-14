@@ -19,7 +19,16 @@ int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
 int uvmcopy(pagetable_t old, pagetable_t new, uint64 sz); // 需要在 vm.c 确认是否有此函数，或稍后实现
 uint64 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm); // 需确认
 void proc_freepagetable(pagetable_t pagetable, uint64 sz); // 需确认
+// 【新增】手动声明 logs 函数，或者包含 log.h (如果有)
+extern void begin_op(void);
+extern void end_op(void);
+// 【新增/确认】显式声明 copyout，确保使用 uint64
+extern int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len);
 
+// 【新增】前向声明，解决 implicit declaration
+int flags2perm(int flags);
+// 【新增这一行，修复报错】
+extern int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len);
 // 加载程序段到页表
 static int loadseg(pagetable_t pagetable, uint64 va, struct inode *ip, uint offset, uint sz) {
   uint i, n;
@@ -40,7 +49,7 @@ static int loadseg(pagetable_t pagetable, uint64 va, struct inode *ip, uint offs
 }
 
 int exec(char *path, char **argv) {
-  char *s, *last;
+  //char *s, *last;
   int i, off;
   uint64 argc, sz = 0, sp, ustack[MAXARG+1], stackbase;
   struct elfhdr elf;

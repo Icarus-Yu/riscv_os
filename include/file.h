@@ -42,4 +42,12 @@ extern struct devsw devsw[];
 
 #define CONSOLE 1
 
+// 【新增：文件操作函数声明】
+struct file* filealloc(void);
+struct file* filedup(struct file *f);
+void fileclose(struct file *f);
+int filestat(struct file *f, uint64 addr);
+int fileread(struct file *f, uint64 addr, int n);
+int filewrite(struct file *f, uint64 addr, int n);
+void fileinit(void);
 #endif

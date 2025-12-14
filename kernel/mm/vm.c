@@ -23,7 +23,7 @@ pte_t* walk(pagetable_t pagetable, uint64_t va, int alloc) {
     return &pagetable[PX(0, va)];
 }
 
-int mappages(pagetable_t pagetable, uint64_t va, uint64_t size, uint64_t pa, int perm) {
+int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm) {
     uint64_t a, last;
     pte_t *pte;
 
@@ -160,4 +160,99 @@ int copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) {
     dstva = va0 + PGSIZE;
   }
   return 0;
+}
+// 查找虚拟地址对应的物理地址
+// 如果未映射或用户不可访问，返回 0
+uint64 walkaddr(pagetable_t pagetable, uint64 va) {
+  pte_t *pte;
+  uint64 pa;
+
+  if(va >= MAXVA) // MAXVA 通常是 (1L << (39-1)) - 1，如果没有定义，可以暂时忽略或定义它
+    return 0;
+
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    return 0;
+  if((*pte & PTE_V) == 0)
+    return 0;
+  if((*pte & PTE_U) == 0)
+    return 0;
+  
+  pa = PTE2PA(*pte);
+  return pa;
+}
+
+// 清除页面的有效位或用户权限，用于创建保护页 (Guard Page)
+void uvmclear(pagetable_t pagetable, uint64 va) {
+  pte_t *pte;
+  
+  pte = walk(pagetable, va, 0);
+  if(pte == 0)
+    panic("uvmclear");
+  
+  // 清除有效位，访问该页将触发缺页异常
+  *pte &= ~PTE_V; 
+}
+
+// ... (追加到文件末尾) ...
+
+// 解除映射并释放物理内存
+// pagetable: 页表
+// va: 虚拟起始地址 (必须页对齐)
+// npages: 页数
+// do_free: 是否释放物理内存
+void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free) {
+  uint64 a;
+  pte_t *pte;
+
+  if((va % PGSIZE) != 0)
+    panic("uvmunmap: not aligned");
+
+  for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
+    if((pte = walk(pagetable, a, 0)) == 0)
+      panic("uvmunmap: walk");
+    
+    if((*pte & PTE_V) == 0)
+      panic("uvmunmap: not mapped");
+
+    if(PTE_FLAGS(*pte) == PTE_V)
+      panic("uvmunmap: not a leaf");
+
+    if(do_free){
+      uint64 pa = PTE2PA(*pte);
+      kfree((void*)pa);
+    }
+    *pte = 0;
+  }
+}
+
+// 分配页表并映射物理内存，用于增长进程空间
+// oldsz: 旧大小
+// newsz: 新大小
+// xperm: 额外权限 (通常是 PTE_W | PTE_X 等)
+uint64 uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz, int xperm) {
+  char *mem;
+  uint64 a;
+
+  if(newsz < oldsz)
+    return oldsz;
+
+  oldsz = PGROUNDUP(oldsz);
+  
+  for(a = oldsz; a < newsz; a += PGSIZE){
+    mem = kalloc();
+    if(mem == 0){
+      uvmunmap(pagetable, oldsz, (a - oldsz) / PGSIZE, 1);
+      return 0;
+    }
+    memset(mem, 0, PGSIZE);
+    
+    // 映射内存：用户权限 (PTE_U) 是必须的
+    if(mappages(pagetable, a, PGSIZE, (uint64)mem, PTE_R|PTE_U|xperm) != 0){
+      kfree(mem);
+      uvmunmap(pagetable, oldsz, (a - oldsz) / PGSIZE, 1);
+      return 0;
+    }
+  }
+  return newsz;
 }

@@ -14,8 +14,12 @@ void kvminit(void);
 void kvminithart(void);
 
 // 新增：暴露给 proc.c 使用的函数
-int mappages(pagetable_t pagetable, uint64_t va, uint64_t size, uint64_t pa, int perm);
+int mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm);
 pagetable_t uvmcreate(void); // 用于创建用户空页表
-void uvmunmap(pagetable_t pagetable, uint64_t va, uint64_t npages, int do_free); // 用于释放
+void uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free); // 用于释放
 void freewalk(pagetable_t pagetable);
+
+// 【新增】
+uint64 walkaddr(pagetable_t pagetable, uint64 va);
+void uvmclear(pagetable_t pagetable, uint64 va);
 #endif // __MEMORY_H__

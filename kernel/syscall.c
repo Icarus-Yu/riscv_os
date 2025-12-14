@@ -21,6 +21,10 @@ extern int sys_chdir(void);
 extern int sys_link(void);
 extern int sys_unlink(void);
 
+// 【新增】
+extern int sys_dup(void);
+extern int sys_fstat(void);
+
 // 系统调用函数表
 static int (*syscalls[])(void) = {
     [SYS_write]   sys_write,
@@ -37,6 +41,10 @@ static int (*syscalls[])(void) = {
     [SYS_chdir]   sys_chdir,
     [SYS_link]    sys_link,
     [SYS_unlink]  sys_unlink,
+
+    // 【新增】对应 include/syscall.h 中的编号
+    [SYS_dup]     sys_dup,    // SYS_dup = 10
+    [SYS_fstat]   sys_fstat,  // SYS_fstat = 8
 };
 
 // 辅助函数：获取第 n 个 int 类型参数

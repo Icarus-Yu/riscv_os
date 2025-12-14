@@ -64,6 +64,48 @@ void test_filesystem() {
     iunlockput(ip);
     
     printf("PASS: File System functionality check passed!\n");
+
+    // --- 新增测试：文件描述符复制 (Dup) ---
+    printf("[Test] Testing file duplication...\n");
+    
+    // 1. 打开文件
+    //struct inode *ip = namei("/temp/hello");
+    ip = namei("/temp/hello");
+    if(ip == 0) panic("failed to open /temp/hello");
+    ilock(ip);
+    
+    // 模拟打开文件，分配一个 struct file
+    struct file *f = filealloc();
+    f->type = FD_INODE;
+    f->ip = ip;
+    f->off = 0;
+    f->readable = 1;
+    f->writable = 0;
+    f->ref = 1; 
+    iunlock(ip); // filealloc 成功后，inode 锁交给 file 结构逻辑管理（读写时加锁）
+                 // 但这里是手动模拟，注意 ilock/iunlock 的配对
+                 // filealloc 不会自动 ilock，我们需要保持 inode 的有效性
+    
+    // 2. 测试 filedup
+    // 注意：真正的 sys_dup 会操作进程的打开文件表，这里我们只测试核心的 filedup
+    struct file *f_dup = filedup(f);
+    
+    if(f_dup->ref != 2) 
+        panic("filedup failed: ref count mismatch");
+    
+    if(f_dup != f)
+        panic("filedup failed: pointer mismatch");
+        
+    printf("[4] filedup: OK (ref count = %d)\n", f->ref);
+
+    // 3. 清理引用
+    fileclose(f);     // ref 变为 1
+    fileclose(f_dup); // ref 变为 0，触发 iput
+    
+    // ... 原有的 end_op() ...
+    end_op();
+    
+    printf("PASS: File System functionality check passed!\n");
 }
 
 void main() {

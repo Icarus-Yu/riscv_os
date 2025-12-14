@@ -24,7 +24,8 @@
 #define PTE_W (1L << 2)
 #define PTE_X (1L << 3)
 #define PTE_U (1L << 4)
-
+#define MAXVA (1L << (39 - 1)) - 1
+#define PTE_FLAGS(pte) ((pte) & 0x3FF)
 typedef uint64_t pte_t;
 typedef uint64_t *pagetable_t;
 
