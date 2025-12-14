@@ -71,9 +71,10 @@ int exec(char *path, char **argv) {
   // 2. 检查 ELF 魔数
   if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;
-  if(elf.magic != ELF_MAGIC)
-  printf("[exec] error: bad ELF magic %x\n", elf.magic);
+  if(elf.magic != ELF_MAGIC) {  
+    printf("[exec] error: bad ELF magic %x\n", elf.magic);
     goto bad;
+  } 
 
   // 3. 创建新页表
   if((pagetable = proc_pagetable(p)) == 0)

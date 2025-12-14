@@ -147,30 +147,32 @@ int sys_close(void) {
 
 // 4. 实现 sys_open (最核心)
 int sys_open(void) {
-  //char path[MAXPATH];
+  char path[MAXPATH]; // 1. 启用内核缓冲区
   int fd, omode;
   struct file *f;
   struct inode *ip;
+  int n;
 
-  // 获取参数：path 和 mode
-  // 注意：需要 argstr 函数 (fs.c 或 syscall.c 中需实现)
-  // if(argstr(0, path, MAXPATH) < 0 || argint(1, &omode) < 0)
-  //   return -1;
-  // 这里简化：假设只获取地址
+  // 2. 获取参数，并从用户态拷贝字符串
   uint64 pathaddr;
-  if(argaddr(0, &pathaddr) < 0 || argint(1, &omode) < 0) return -1;
-  // 此处应有 copyinstr 将路径从用户态拷贝到 path 数组
-  printf("[sys_open] opening %s\n", (char*)pathaddr);
+  if(argaddr(0, &pathaddr) < 0 || argint(1, &omode) < 0) 
+    return -1;
+  
+  // 使用 fetchstr 安全地拷贝字符串
+  if((n = fetchstr(pathaddr, path, MAXPATH)) < 0)
+    return -1;
+
+  printf("[sys_open] opening %s\n", path); // 3. 打印内核缓冲区的内容
   begin_op();
 
   if(omode & O_CREATE){
-   ip = create((char*)pathaddr, T_FILE, 0, 0); // 使用 create 创建文件
+    ip = create(path, T_FILE, 0, 0); // 4. 使用拷贝过来的 path
     if(ip == 0){
       end_op();
       return -1;
     }
   } else {
-    if((ip = namei((char*)pathaddr)) == 0){ // 这里的 pathaddr 需要转换
+    if((ip = namei(path)) == 0){ // 5. 使用拷贝过来的 path
        end_op();
        return -1;
     }
@@ -213,17 +215,18 @@ int fdalloc(struct file *f) {
 }
 
 int sys_mkdir(void) {
-  //char path[MAXPATH];
+  char path[MAXPATH]; // 启用 buffer
   struct inode *ip;
 
   begin_op();
-  // 注意：需要 argstr 实现，如果没有实现，暂时只能传地址强转
-  // if(argstr(0, path, MAXPATH) < 0) ...
-  // 临时方案：假设 a0 是地址
   uint64 pathaddr;
-  argaddr(0, &pathaddr);
+  // 获取地址并拷贝
+  if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0){
+    end_op();
+    return -1;
+  }
   
-  if((ip = create((char*)pathaddr, T_DIR, 0, 0)) == 0){
+  if((ip = create(path, T_DIR, 0, 0)) == 0){ // 使用 path
     end_op();
     return -1;
   }
@@ -235,16 +238,21 @@ int sys_mkdir(void) {
 // kernel/sysfile.c
 
 int sys_chdir(void) {
-  //char path[MAXPATH];
+  char path[MAXPATH]; // 1. 启用内核缓冲区
   struct inode *ip;
   struct proc *p = current_proc;
   
   begin_op();
-  // 同上，临时获取参数
+  
+  // 2. 获取参数地址并安全拷贝字符串
   uint64 pathaddr;
-  argaddr(0, &pathaddr);
+  if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0){
+    end_op();
+    return -1;
+  }
 
-  if((ip = namei((char*)pathaddr)) == 0){
+  // 3. 使用内核缓冲区的 path
+  if((ip = namei(path)) == 0){
     end_op();
     return -1;
   }
@@ -271,17 +279,19 @@ int sys_chdir(void) {
 // --- 新增：创建硬链接 ---
 int sys_link(void) {
   char name[DIRSIZ];
+  char old[MAXPATH], new[MAXPATH]; // 1. 启用两个内核缓冲区
   struct inode *dp, *ip;
-  // 临时使用 argaddr 获取字符串地址 (假设内核可以直接读取用户指针)
-  // 标准做法应使用 argstr
-  uint64 oldpath, newpath;
+  uint64 oldaddr, newaddr;
 
-  if(argaddr(0, &oldpath) < 0 || argaddr(1, &newpath) < 0)
+  // 2. 分别获取两个参数的地址，并安全拷贝
+  if(argaddr(0, &oldaddr) < 0 || fetchstr(oldaddr, old, MAXPATH) < 0 ||
+     argaddr(1, &newaddr) < 0 || fetchstr(newaddr, new, MAXPATH) < 0)
     return -1;
   
-  // 1. 查找源文件
   begin_op();
-  if((ip = namei((char*)oldpath)) == 0){
+  
+  // 3. 使用拷贝过来的 old 路径
+  if((ip = namei(old)) == 0){
     end_op();
     return -1;
   }
@@ -294,11 +304,11 @@ int sys_link(void) {
   }
 
   ip->nlink++;
-  iupdate(ip); // 更新链接数
+  iupdate(ip);
   iunlock(ip);
 
-  // 2. 查找目标目录
-  if((dp = nameiparent((char*)newpath, name)) == 0)
+  // 4. 使用拷贝过来的 new 路径
+  if((dp = nameiparent(new, name)) == 0)
     goto bad;
   
   ilock(dp);
@@ -307,14 +317,14 @@ int sys_link(void) {
     goto bad;
   }
   iunlockput(dp);
-  iput(ip); // 释放源文件引用
+  iput(ip);
 
   end_op();
   return 0;
 
 bad:
   ilock(ip);
-  ip->nlink--; // 回滚链接数
+  ip->nlink--;
   iupdate(ip);
   iunlockput(ip);
   end_op();
@@ -326,27 +336,28 @@ int sys_unlink(void) {
   struct inode *ip, *dp;
   struct dirent de;
   char name[DIRSIZ];
+  char path[MAXPATH]; // 1. 启用内核缓冲区
   uint off;
   uint64 pathaddr;
 
-  if(argaddr(0, &pathaddr) < 0)
+  // 2. 获取参数地址并安全拷贝字符串
+  if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0)
     return -1;
 
   begin_op();
   
-  // 1. 查找父目录
-  if((dp = nameiparent((char*)pathaddr, name)) == 0){
+  // 3. 使用内核缓冲区的 path
+  if((dp = nameiparent(path, name)) == 0){
     end_op();
     return -1;
   }
 
   ilock(dp);
 
-  // 2. 确保不能删除 "." 和 ".."
+  // 确保不能删除 "." 和 ".."
   if(strncmp(name, ".", DIRSIZ) == 0 || strncmp(name, "..", DIRSIZ) == 0)
     goto bad;
 
-  // 3. 在目录中查找目标文件
   if((ip = dirlookup(dp, name, &off)) == 0)
     goto bad;
   
@@ -360,7 +371,6 @@ int sys_unlink(void) {
     goto bad;
   }
 
-  // 4. 清空目录项
   memset(&de, 0, sizeof(de));
   if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
     panic("unlink: writei");
@@ -369,12 +379,11 @@ int sys_unlink(void) {
     dp->nlink--;
     iupdate(dp);
   }
-  iunlockput(dp); // 释放父目录
+  iunlockput(dp);
 
-  // 5. 减少目标文件的链接数
   ip->nlink--;
   iupdate(ip);
-  iunlockput(ip); // 这里会触发 iput -> itrunc (如果 nlink==0)
+  iunlockput(ip);
 
   end_op();
   return 0;

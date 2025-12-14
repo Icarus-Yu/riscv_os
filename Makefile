@@ -21,7 +21,7 @@ ULIB = $U/ulib.o $U/usys.o $U/printf.o
 
 # 用户程序列表
 UPROGS = \
-	$U/_init
+	$U/init
 
 # --- 源文件搜索路径 ---
 # 显式地将 entry.S 分离出来，确保它在链接时是第一个
@@ -70,14 +70,14 @@ $U/usys.o : $U/usys.S
 
 # 链接 _init 程序
 # 注意：用户程序不能使用内核的 LDFLAGS (kernel.ld)，需要手动指定 -Ttext 0
-$U/_init: $U/init.o $(ULIB)
+$U/init: $U/init.o $(ULIB)
 	$(LD) -N -e main -Ttext 0 -nostdlib -o $@ $^
 	$(OBJDUMP) -S $@ > $U/init.asm
 
 # --- 清理规则 ---
 clean:
 	rm -rf kernel/kernel.elf $(shell find kernel -name '*.o' -o -name '*.d')
-	rm -rf $(U)/*.o $(U)/*.d $(U)/*.asm $(U)/_init
+	rm -rf $(U)/*.o $(U)/*.d $(U)/*.asm $(U)/init
 	rm -f fs.img mkfs/mkfs README
 
 # --- 运行与调试 ---

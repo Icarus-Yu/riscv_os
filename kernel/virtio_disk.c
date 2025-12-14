@@ -269,22 +269,22 @@ void virtio_disk_rw(struct buf *b, int write) {
   uint64_t cycle_count = 0;
   // 【关键修复】轮询/休眠混合模式
   while(b->disk == 1) {
-    if(current_proc) {
-        // 正常模式：有进程上下文，睡眠等待中断
-        sleep(b, &disk.vdisk_lock);
-    } else {
-        // 启动模式：无进程，手动轮询
+    // 【修改点】暂时注释掉 sleep 逻辑，强制使用轮询
+    // if(current_proc) {
+    //    sleep(b, &disk.vdisk_lock);
+    // } else {
+       
+        // 即使有进程，也必须手动去查磁盘好了没，因为现在没有中断来通知我们
         release(&disk.vdisk_lock);
-        virtio_disk_intr(); // 手动检查
+        virtio_disk_intr(); // 手动检查中断状态
         acquire(&disk.vdisk_lock);
-
+    // }
         // --- 调试代码开始 ---
         cycle_count++;
         if (cycle_count % 100000 == 0) {
             printf("virtio_disk_rw: waiting... used_idx=%d, disk.used->idx=%d\n", 
                    disk.used_idx, disk.used->idx);
         }
-    }
   }
 
   disk.info[idx[0]].b = 0;
