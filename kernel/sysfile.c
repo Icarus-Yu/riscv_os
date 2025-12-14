@@ -11,6 +11,9 @@
 #include "console.h"
 #include "string.h"
 // --- 手动补充原本在 defs.h 中的函数声明 ---
+extern int exec(char *path, char **argv);
+extern int fetchaddr(uint64 addr, uint64 *ip);
+extern int fetchstr(uint64 addr, char *buf, int max);
 // 【新增】补充 readi, writei 和 isdirempty 的声明
 int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
 int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
@@ -426,4 +429,60 @@ int sys_fstat(void) {
   
   // 2. 调用 file.c 中的 filestat 进行填充和拷贝
   return filestat(f, st);
+}
+
+// 【新增 2】sys_exec 实现
+int sys_exec(void) {
+  char path[MAXPATH], *argv[MAXARG];
+  int i;
+  uint64 uargv, uarg;
+
+  // 1. 获取程序路径 (参数 0)
+  uint64 pathaddr;
+  if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0)
+    return -1;
+
+  // 2. 获取 argv 数组的地址 (参数 1)
+  if(argaddr(1, &uargv) < 0){
+    return -1;
+  }
+
+  // 3. 提取 argv 数组中的每个字符串
+  memset(argv, 0, sizeof(argv));
+  for(i=0;; i++){
+    if(i >= MAXARG)
+      goto bad;
+    
+    // 读取 argv[i] 指针
+    if(fetchaddr(uargv + sizeof(uint64)*i, &uarg) < 0)
+      goto bad;
+    
+    if(uarg == 0){ // 空指针代表数组结束
+      argv[i] = 0;
+      break;
+    }
+    
+    // 为字符串分配内核内存
+    argv[i] = kalloc();
+    if(argv[i] == 0)
+      goto bad;
+    
+    // 拷贝字符串内容
+    if(fetchstr(uarg, argv[i], PGSIZE) < 0)
+      goto bad;
+  }
+
+  // 4. 执行 exec
+  int ret = exec(path, argv);
+
+  // 如果成功，exec 不会返回。如果返回了，说明失败，清理内存。
+  for(i = 0; i < MAXARG && argv[i] != 0; i++)
+    kfree(argv[i]);
+
+  return ret;
+
+ bad:
+  for(i = 0; i < MAXARG && argv[i] != 0; i++)
+    kfree(argv[i]);
+  return -1;
 }
