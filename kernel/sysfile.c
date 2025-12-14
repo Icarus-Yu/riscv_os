@@ -441,7 +441,7 @@ int sys_exec(void) {
   uint64 pathaddr;
   if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0)
     return -1;
-
+  printf("[sys_exec] path: %s\n", path);
   // 2. 获取 argv 数组的地址 (参数 1)
   if(argaddr(1, &uargv) < 0){
     return -1;

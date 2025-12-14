@@ -141,7 +141,7 @@ void main() {
     // iinit();         // (可选) 如果你实现了 inode 缓存初始化，可以在这里调用
     printf_color(COLOR_GREEN, " - File System initialized.\n");
     
-    test_filesystem();
+    //test_filesystem();
     
     // 5. 进程管理初始化
     printf("[Boot] Initializing Process Manager...\n");

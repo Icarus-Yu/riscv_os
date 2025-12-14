@@ -57,12 +57,13 @@ int exec(char *path, char **argv) {
   struct proghdr ph;
   pagetable_t pagetable = 0, oldpagetable;
   struct proc *p = current_proc;
-
+  printf("[exec] requesting: %s\n", path);
   begin_op();
 
   // 1. 查找可执行文件
   if((ip = namei(path)) == 0){
     end_op();
+    printf("[exec] error: namei failed (file not found)\n");
     return -1;
   }
   ilock(ip);
@@ -71,6 +72,7 @@ int exec(char *path, char **argv) {
   if(readi(ip, 0, (uint64)&elf, 0, sizeof(elf)) != sizeof(elf))
     goto bad;
   if(elf.magic != ELF_MAGIC)
+  printf("[exec] error: bad ELF magic %x\n", elf.magic);
     goto bad;
 
   // 3. 创建新页表
@@ -153,6 +155,7 @@ int exec(char *path, char **argv) {
   return argc; // 返回 argc 到 a0
 
  bad:
+ printf("[exec] error: failed at bad label\n");
   if(pagetable)
     proc_freepagetable(pagetable, sz);
   if(ip){
