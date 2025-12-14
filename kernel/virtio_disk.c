@@ -266,7 +266,7 @@ void virtio_disk_rw(struct buf *b, int write) {
   __sync_synchronize();
 
   *R(VIRTIO_MMIO_QUEUE_NOTIFY) = 0; 
-  uint64_t cycle_count = 0;
+  //uint64_t cycle_count = 0;
   // 【关键修复】轮询/休眠混合模式
   while(b->disk == 1) {
     // 【修改点】暂时注释掉 sleep 逻辑，强制使用轮询
@@ -280,11 +280,11 @@ void virtio_disk_rw(struct buf *b, int write) {
         acquire(&disk.vdisk_lock);
     // }
         // --- 调试代码开始 ---
-        cycle_count++;
-        if (cycle_count % 100000 == 0) {
-            printf("virtio_disk_rw: waiting... used_idx=%d, disk.used->idx=%d\n", 
-                   disk.used_idx, disk.used->idx);
-        }
+        // cycle_count++;
+        // if (cycle_count % 100000 == 0) {
+        //     printf("virtio_disk_rw: waiting... used_idx=%d, disk.used->idx=%d\n", 
+        //            disk.used_idx, disk.used->idx);
+        // }
   }
 
   disk.info[idx[0]].b = 0;

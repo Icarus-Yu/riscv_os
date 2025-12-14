@@ -129,7 +129,7 @@ int sys_write(void) {
 
   if(argfd(0, &fd, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
    { return -1;}
-    printf("[sys_write] fd=%d n=%d\n", fd, n); //
+    //printf("[sys_write] fd=%d n=%d\n", fd, n); //
   return filewrite(f, p, n);
 }
 
@@ -147,32 +147,30 @@ int sys_close(void) {
 
 // 4. 实现 sys_open (最核心)
 int sys_open(void) {
-  char path[MAXPATH]; // 1. 启用内核缓冲区
+  char path[MAXPATH];
   int fd, omode;
   struct file *f;
   struct inode *ip;
   int n;
 
-  // 2. 获取参数，并从用户态拷贝字符串
+  // 1. 获取参数，并从用户态拷贝字符串
   uint64 pathaddr;
   if(argaddr(0, &pathaddr) < 0 || argint(1, &omode) < 0) 
     return -1;
   
-  // 使用 fetchstr 安全地拷贝字符串
   if((n = fetchstr(pathaddr, path, MAXPATH)) < 0)
     return -1;
 
-  printf("[sys_open] opening %s\n", path); // 3. 打印内核缓冲区的内容
   begin_op();
 
   if(omode & O_CREATE){
-    ip = create(path, T_FILE, 0, 0); // 4. 使用拷贝过来的 path
+    ip = create(path, T_FILE, 0, 0);
     if(ip == 0){
       end_op();
       return -1;
     }
   } else {
-    if((ip = namei(path)) == 0){ // 5. 使用拷贝过来的 path
+    if((ip = namei(path)) == 0){
        end_op();
        return -1;
     }
@@ -190,14 +188,25 @@ int sys_open(void) {
     end_op();
     return -1;
   }
-  iunlock(ip);
-  end_op();
 
-  f->type = FD_INODE;
+  // --- 【关键修复点】 ---
+  // 设置文件类型：如果是设备，必须标记为 FD_DEVICE
+  if(ip->type == T_DEVICE){
+    f->type = FD_DEVICE;
+    f->major = ip->major;
+  } else {
+    f->type = FD_INODE;
+    f->off = 0;
+  }
+  // --------------------
+
+  // 公共属性设置
   f->ip = ip;
-  f->off = 0;
   f->readable = !(omode & O_WRONLY);
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
+
+  iunlock(ip);
+  end_op();
 
   return fd;
 }
@@ -452,7 +461,7 @@ int sys_exec(void) {
   uint64 pathaddr;
   if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0)
     return -1;
-  printf("[sys_exec] path: %s\n", path);
+  //printf("[sys_exec] path: %s\n", path);
   // 2. 获取 argv 数组的地址 (参数 1)
   if(argaddr(1, &uargv) < 0){
     return -1;
@@ -503,21 +512,21 @@ int sys_exec(void) {
 // 【新增】创建设备文件
 int sys_mknod(void) {
   struct inode *ip;
-  char path[MAXPATH];
+  char path[MAXPATH]; // 必须分配足够大的栈空间
   int major, minor;
+  uint64 pathaddr;
 
   begin_op();
   
-  // 获取参数：路径、major、minor
-  uint64 pathaddr;
+  // 必须使用 fetchstr 安全拷贝字符串
   if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0 ||
      argint(1, &major) < 0 || argint(2, &minor) < 0){
     end_op();
     return -1;
   }
 
-  // 创建 inode
-  printf("[sys_mknod] create device %s major=%d minor=%d\n", path, major, minor);
+  //printf("[sys_mknod] create device %s major=%d minor=%d\n", path, major, minor);
+  
   if((ip = create(path, T_DEVICE, major, minor)) == 0){
     end_op();
     return -1;

@@ -59,47 +59,43 @@ void timerinit(void) {
 }
 
 void kerneltrap(void) {
-    uint64_t scause = r_scause();
+    uint64 scause = r_scause();
+    // 1. 必须先保存 sepc 和 sstatus！
+    // 因为 yield() 会切换进程，导致这两个 CSR 寄存器被覆盖
+    uint64 sepc = r_sepc();
+    uint64 sstatus = r_sstatus();
 
     if (scause & (1ULL << 63)) {
-        uint64_t interrupt_code = scause & 0x7FFFFFFFFFFFFFFF;
+        uint64 interrupt_code = scause & 0x7FFFFFFFFFFFFFFF;
 
         if (interrupt_code == 5) {
             // 时钟中断
-            timer_ticks = timer_ticks + 1;  // 明确的递增
+            timer_ticks = timer_ticks + 1;
+            
+            // 确保没有 printf，防止栈溢出
+            // if ((timer_ticks % 10) == 0) { ... }
 
-            // 每10次中断打印一次
-            if ((timer_ticks % 10) == 0) {
-                uint64_t now = get_time();
-                uint64_t uptime = now - boot_time;
-                uint64_t seconds, milliseconds;
-
-                cycles_to_time(uptime, &seconds, &milliseconds);
-
-                printf_color(COLOR_GREEN,
-                    "[Timer] Tick #%d | Cycles: %d\n",
-                    (int)(timer_ticks & 0x7FFFFFFF),  // 只取低31位避免负数
-                    (int)seconds,
-                    (int)milliseconds,
-                    (int)uptime);
-            }
-            // 设置下一次时钟中断
             set_next_timer();
-            //新增实现抢占式调度
-            //如果有进程正在运行，则强制让出cpu
+            
+            // 抢占式调度
             if(current_proc != 0 && current_proc->state == RUNNING) {
-                yield();
+                yield(); 
             }
 
         } else {
             printf_color(COLOR_RED, "Unknown interrupt: %d\n", (int)interrupt_code);
         }
     } else {
-        printf_color(COLOR_RED,
+         printf_color(COLOR_RED,
             "Unexpected trap: scause=0x%x, sepc=0x%x\n",
             (int)scause, (int)r_sepc());
-        while(1);
+         while(1);
     }
+
+    // 2. 在退出前恢复 sepc 和 sstatus
+    // 这样 sret 才能正确返回到中断发生前的位置
+    w_sepc(sepc);
+    w_sstatus(sstatus);
 }
 // 处理来自用户态的中断/异常
 void usertrap(void) {
