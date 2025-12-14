@@ -130,7 +130,8 @@ void main() {
     printf("[Boot] Initializing File System...\n");
     virtio_disk_init(); // 初始化磁盘驱动
     binit();            // 初始化缓冲区缓存
-    
+    // 【新增】初始化控制台驱动
+    consoleinit();
     // [修复3] 初始化日志系统 (必须在 binit 之后，使用文件系统之前)
     struct buf *bp = bread(ROOTDEV, 1); // 读取超级块 (Block 1)
     struct superblock sb;

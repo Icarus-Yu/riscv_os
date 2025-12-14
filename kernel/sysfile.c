@@ -125,9 +125,11 @@ int sys_write(void) {
   struct file *f;
   int n;
   uint64 p;
+  int fd;
 
-  if(argfd(0, 0, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
-    return -1;
+  if(argfd(0, &fd, &f) < 0 || argint(2, &n) < 0 || argaddr(1, &p) < 0)
+   { return -1;}
+    printf("[sys_write] fd=%d n=%d\n", fd, n); //
   return filewrite(f, p, n);
 }
 
@@ -158,7 +160,7 @@ int sys_open(void) {
   uint64 pathaddr;
   if(argaddr(0, &pathaddr) < 0 || argint(1, &omode) < 0) return -1;
   // 此处应有 copyinstr 将路径从用户态拷贝到 path 数组
-
+  printf("[sys_open] opening %s\n", (char*)pathaddr);
   begin_op();
 
   if(omode & O_CREATE){
@@ -485,4 +487,34 @@ int sys_exec(void) {
   for(i = 0; i < MAXARG && argv[i] != 0; i++)
     kfree(argv[i]);
   return -1;
+}
+
+// kernel/sysfile.c
+
+// 【新增】创建设备文件
+int sys_mknod(void) {
+  struct inode *ip;
+  char path[MAXPATH];
+  int major, minor;
+
+  begin_op();
+  
+  // 获取参数：路径、major、minor
+  uint64 pathaddr;
+  if(argaddr(0, &pathaddr) < 0 || fetchstr(pathaddr, path, MAXPATH) < 0 ||
+     argint(1, &major) < 0 || argint(2, &minor) < 0){
+    end_op();
+    return -1;
+  }
+
+  // 创建 inode
+  printf("[sys_mknod] create device %s major=%d minor=%d\n", path, major, minor);
+  if((ip = create(path, T_DEVICE, major, minor)) == 0){
+    end_op();
+    return -1;
+  }
+
+  iunlockput(ip);
+  end_op();
+  return 0;
 }

@@ -3,7 +3,7 @@
 #define __CONSOLE_H__
 
 #include <stdarg.h>
-
+#include "memory.h"
 // --- ANSI Color Codes ---
 #define COLOR_RESET   0
 #define COLOR_RED     31
@@ -19,7 +19,7 @@ void printf_color(int color, const char *fmt, ...);
  void panic(char *s); // <--- 新增这一行
 // --- console.c ---
 void consputc(char c);
-
+void consoleinit(void);
 // --- uart.c ---
 void uart_putc(char c);
 
