@@ -80,4 +80,5 @@ int wait_process(void);                  // 等待并回收僵尸进程
 // [新增] 测试函数
 void test_process_creation(void);
 void test_scheduler(void);
+void test_synchronization(void);
 #endif // __PROC_H__

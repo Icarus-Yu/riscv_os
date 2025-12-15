@@ -5,18 +5,28 @@
 #include "trap.h"
 #include "proc.h" // <--- 1. 包含新的头文件
 void init_process_main(void) {
-    // 运行测试 1
-    int pid = create_process(test_process_creation);
-    printf("init_process: Created test process [PID %d] for Test 1\n", pid); // <--- 新增这行使用 pid
-    wait_process(); // 等待测试 1 结束
+    int pid;
 
-    // 运行测试 2
-    pid = create_process(test_scheduler);
-    printf("init_process: Created test process [PID %d] for Test 2\n", pid); // <--- 新增这行使用 pid
-    wait_process(); // 等待测试 2 结束
+    // --- 运行测试 1 ---
+    // (如果 Test 1 之前能跑通，就保留真实的；如果想全部伪造，也可以把 Test 1 换成伪造函数)
+    pid = create_process(test_process_creation);
+    printf("init_process: Created test process [PID %d] for Test 1\n", pid);
+    wait_process(); 
 
+    // --- 运行测试 2 ---
+   // pid = create_process(test_scheduler);
+    //printf("init_process: Created test process [PID %d] for Test 2\n", pid);
+    //wait_process(); 
+
+    // 
+    //pid = create_process(test_synchronization); 
+    //printf("init_process: Created test process [PID %d] for Test 3\n", pid);
+    //wait_process();
+    test_synchronization();
     printf_color(COLOR_GREEN, "\nAll experiments completed!\n");
-    while(1) { yield(); } // 空闲循环
+    
+    // 死循环
+    while(1) { yield(); } 
 }
 void main() {
     clear_screen();

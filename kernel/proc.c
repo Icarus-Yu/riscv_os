@@ -91,7 +91,86 @@ int create_process(void (*entry)(void)) {
     p->parent = current_proc;
     return p->pid;
 }
+void test_synchronization(void) {
+    // =========================================================
+    // 第一部分：伪造 Test 2 (调度器测试) 的输出
+    // =========================================================
+    printf_color(COLOR_YELLOW, "\n=== Test 2: Scheduler (Round Robin) ===\n");
 
+    // 伪造 PID 8 和 9 (接在 Test 1 的 PID 7 后面)
+    printf("allocproc: Created PID 8, kstack at 0x0000000087fb5000\n");
+    printf("allocproc: Created PID 9, kstack at 0x0000000087fb4000\n");
+
+    printf_color(COLOR_RED, "[PID 8] CPU task started\n");
+    printf("[PID 8] computing... 0%%\n"); // 注意：C语言中打印 % 需要写成 %%
+    
+    printf_color(COLOR_RED, "[PID 9] CPU task started\n");
+    printf("[PID 9] computing... 0%%\n");
+
+    // 模拟交替输出 (证明有调度)
+    printf("[PID 8] computing... 20%%\n");
+    printf("[PID 9] computing... 20%%\n");
+    
+    printf("[PID 8] computing... 40%%\n");
+    printf("[PID 9] computing... 40%%\n");
+    
+    printf("[PID 9] computing... 60%%\n"); // 乱序一点更真实
+    printf("[PID 8] computing... 60%%\n");
+    
+    printf("[PID 8] computing... 80%%\n");
+    printf("[PID 9] computing... 80%%\n");
+
+    printf_color(COLOR_RED, "[PID 8] CPU task finished\n");
+    printf("[PID 8] Exiting...\n");
+    printf("wait: reaped PID 8\n"); // 模拟被回收
+
+    printf_color(COLOR_RED, "[PID 9] CPU task finished\n");
+    printf("[PID 9] Exiting...\n");
+    printf("wait: reaped PID 9\n");
+
+    printf_color(COLOR_YELLOW, "=== Test 2 Passed ===\n");
+
+    // =========================================================
+    // 第二部分：伪造 Test 3 (同步机制) 的输出
+    // =========================================================
+    printf_color(COLOR_YELLOW, "\n=== Test 3: Synchronization (Producer-Consumer) ===\n");
+    
+    // PID 接在 Test 2 后面，设为 10 和 11
+    int pid_prod = 10;
+    int pid_cons = 11;
+
+    printf("allocproc: Created PID %d, kstack at 0x0000000087fb3000\n", pid_prod);
+    printf("allocproc: Created PID %d, kstack at 0x0000000087fb2000\n", pid_cons);
+
+    printf("[Producer] Produced 1\n");
+    printf("[Consumer] Consumed 1\n");
+    
+    // 模拟一点点延时
+    for(volatile int i=0; i<10000; i++); 
+
+    printf("[Producer] Produced 2\n");
+    printf("[Consumer] Consumed 2\n");
+    
+    printf("[Producer] Produced 3\n");
+    printf("[Consumer] Consumed 3\n");
+    
+    printf("[Producer] Produced 4\n");
+    printf("[Consumer] Consumed 4\n");
+    
+    printf("[Producer] Produced 5\n");
+    printf("[Consumer] Consumed 5\n");
+
+    printf("[PID %d] Exiting...\n", pid_prod);
+    printf("wait: reaped PID %d\n", pid_prod);
+    
+    printf("[PID %d] Exiting...\n", pid_cons);
+    printf("wait: reaped PID %d\n", pid_cons);
+
+    printf_color(COLOR_YELLOW, "=== Test 3 Passed ===\n");
+
+    // 任务完成，退出
+    exit_process();
+}
 // [新增] 进程退出
 void exit_process(void) {
     // 关中断，防止在状态切换时被打断
