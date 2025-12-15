@@ -29,18 +29,22 @@ void iupdate(struct inode *ip);
 int readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n);
 int writei(struct inode *ip, int user_src, uint64 src, uint off, uint n);
 // 这里推荐方案 1：临时暴露 create 函数供测试使用
+
 struct inode* create(char *path, short type, short major, short minor);
+// --- 【新增声明】为了实现 unlink 测试 ---
+struct inode* nameiparent(char *path, char *name);
+struct inode* dirlookup(struct inode *dp, char *name, uint *poff);
 void test_filesystem() {
     printf("=== Testing File System (Advanced) ===\n");
     begin_op();
     
-    // 1. 测试创建目录
+    // 1. 测试创建目录: 创建 /temp
     struct inode *dp = create("/temp", T_DIR, 0, 0);
     if(dp == 0) panic("failed to create /temp");
     iunlockput(dp);
     printf("[1] mkdir /temp: OK\n");
 
-    // 2. 测试在目录下创建文件
+    // 2. 测试在目录下创建文件: 创建 /temp/hello
     struct inode *ip = create("/temp/hello", T_FILE, 0, 0);
     if(ip == 0) panic("failed to create /temp/hello");
     
@@ -62,6 +66,52 @@ void test_filesystem() {
     printf("[3] read content: %s\n", buf);
     
     iunlockput(ip);
+
+    // --- 【新增】测试删除文件 (模拟 unlink) ---
+    printf("Testing unlink /temp/hello...\n");
+    begin_op(); // 开启事务
+
+    char name[DIRSIZ];
+    uint off;
+    struct dirent de;
+
+    // 5.1 查找父目录 /temp
+    dp = nameiparent("/temp/hello", name);
+    if(dp == 0) panic("unlink: parent not found");
+    ilock(dp);
+
+    // 5.2 查找目标文件 hello
+    ip = dirlookup(dp, name, &off);
+    if(ip == 0) {
+        iunlockput(dp);
+        panic("unlink: file not found");
+    }
+    
+    // 5.3 锁定目标文件
+    ilock(ip);
+
+    // 5.4 清空目录项 (即从父目录中移除该文件记录)
+    memset(&de, 0, sizeof(de));
+    if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+        panic("unlink: writei failed");
+    
+    // 5.5 减少文件的硬链接数
+    ip->nlink--;
+    iupdate(ip); // 更新 inode 到磁盘
+
+    // 5.6 释放锁和引用 (iput 会检查 nlink，若为0则真正释放数据块)
+    iunlockput(ip); // 释放文件 inode
+    iunlockput(dp); // 释放父目录 inode
+
+    end_op(); // 提交事务
+    printf("[4] unlink /temp/hello: OK\n");
+
+    // 6. 再次读取验证 (应该找不到文件)
+    ip = namei("/temp/hello");
+    if(ip != 0) {
+        panic("unlink failed: file still exists");
+    }
+    printf("[5] verify unlink: OK (file gone)\n");
     
     printf("PASS: File System functionality check passed!\n");
 }
