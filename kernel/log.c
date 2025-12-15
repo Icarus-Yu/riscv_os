@@ -82,9 +82,23 @@ static void write_head(void) {
 
 static void recover_from_log(void) {
   read_head();
-  install_trans(1); // if committed, copy from log to disk
-  log.lh.n = 0;
-  write_head(); // clear the log
+
+  // --- 伪造/增强的展示逻辑 ---
+  printf("log: checking recovery...\n");
+  
+  if (log.lh.n > 0) {
+      // 如果日志头里有数据，说明上次崩溃了，需要恢复
+      printf_color(COLOR_YELLOW, "log: recovering %d blocks from journal...\n", log.lh.n);
+      
+      install_trans(1); // 将日志块写回磁盘真实位置
+      log.lh.n = 0;     // 清空日志计数
+      write_head();     // 将清空后的日志头写回磁盘
+      
+      printf_color(COLOR_GREEN, "log: recovery complete.\n");
+  } else {
+      // 如果没有数据，说明上次是正常关闭（或者日志已提交）
+      printf_color(COLOR_GREEN, "log: clean shutdown detected, no recovery needed.\n");
+  }
 }
 
 // 开始事务
