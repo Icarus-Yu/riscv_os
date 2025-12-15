@@ -46,7 +46,8 @@ struct proc {
     int pid;              // 进程 ID
     uint64_t kstack;      // 内核栈的基地址 (虚拟地址)
     struct context context; // 进程的上下文
-
+    void (*fn)(void);
+    struct proc *parent; // 新增：记录父进程
     // 我们将在后续步骤中添加更多字段，例如：
     // pagetable_t pagetable; // 用户页表
     // struct trapframe *trapframe; // 陷阱帧
@@ -71,5 +72,12 @@ void proc_test_main(void);   // 测试进程主函数 (内部使用)
 
 // 外部变量
 extern struct proc *current_proc; // 当前运行的进程
+// [新增] 修改/新增以下函数原型
+int create_process(void (*entry)(void)); // 通用进程创建
+void exit_process(void);                 // 进程退出
+int wait_process(void);                  // 等待并回收僵尸进程
 
+// [新增] 测试函数
+void test_process_creation(void);
+void test_scheduler(void);
 #endif // __PROC_H__

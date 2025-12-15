@@ -4,7 +4,20 @@
 #include "memory.h"
 #include "trap.h"
 #include "proc.h" // <--- 1. 包含新的头文件
+void init_process_main(void) {
+    // 运行测试 1
+    int pid = create_process(test_process_creation);
+    printf("init_process: Created test process [PID %d] for Test 1\n", pid); // <--- 新增这行使用 pid
+    wait_process(); // 等待测试 1 结束
 
+    // 运行测试 2
+    pid = create_process(test_scheduler);
+    printf("init_process: Created test process [PID %d] for Test 2\n", pid); // <--- 新增这行使用 pid
+    wait_process(); // 等待测试 2 结束
+
+    printf_color(COLOR_GREEN, "\nAll experiments completed!\n");
+    while(1) { yield(); } // 空闲循环
+}
 void main() {
     clear_screen();
     printf("====== RISC-V OS Booting ======\n");
@@ -34,9 +47,7 @@ void main() {
    printf("\n====== Experiment 5: Process & Scheduling ======\n");
     procinit();
 
-    create_test_proc(); // 创建第一个测试进程 (PID 1)
-    create_test_proc(); // 创建第二个测试进程 (PID 2)
-    // ----------------------------------------------------
+    create_process(init_process_main);
 
     // ----------------------------------------------------
     // <--- 3. 替换 while(1) ---

@@ -33,5 +33,5 @@ halt:
 .section .bss
 .align 16
 stack_bottom:
-.space 4096
+.space 4096*4
 stack_top:

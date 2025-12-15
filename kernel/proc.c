@@ -66,16 +66,154 @@ found:
 // <--- 新增：进程入口点 ---
 // ----------------------------------------------------
 void proc_entry_point(void) {
-    // 这是所有新进程第一次执行的地方
-    // (在 swtch 返回之后)
-
-    // 开启中断
-    // 因为 swtch 切换时中断是关闭的
+    // 1. 开启中断
     intr_on();
 
-    // TODO: 在这里调用进程的主函数
-    // 为了测试，我们先调用一个固定的测试函数
-    proc_test_main();
+    // 2. 执行进程的具体任务函数
+    if (current_proc->fn) {
+        current_proc->fn();
+    }
+
+    // 3. 任务结束后，必须调用 exit，否则会跑飞
+    exit_process();
+}
+
+// [新增] 通用的创建进程函数
+// 返回 PID，失败返回 -1
+int create_process(void (*entry)(void)) {
+    struct proc *p = allocproc();
+    if(p == 0) {
+        return -1;
+    }
+    
+    p->fn = entry;      // 设置要执行的函数
+    p->state = RUNNABLE; // 设置为就绪状态
+    p->parent = current_proc;
+    return p->pid;
+}
+
+// [新增] 进程退出
+void exit_process(void) {
+    // 关中断，防止在状态切换时被打断
+    intr_off();
+    
+    printf_color(COLOR_BLUE, "[PID %d] Exiting...\n", current_proc->pid);
+    
+    current_proc->state = ZOMBIE; // 变为僵尸态，等待回收
+    
+    // 切换回调度器，永远不会返回
+    swtch(&current_proc->context, &scheduler_context);
+}
+
+// [新增] 等待并回收僵尸进程
+// 简单实现：轮询查找 ZOMBIE 进程并回收
+// 返回被回收进程的 PID，如果没有子进程/无法回收则返回 -1
+int wait_process(void) {
+    struct proc *p;
+    int have_kids, pid;
+
+    while(1) {
+        intr_on();
+        have_kids = 0;
+        
+        for(p = proc; p < &proc[NPROC]; p++) {
+            // [新增] 严格检查：如果这个进程的父进程不是我，就跳过
+            if (p->parent != current_proc) {
+                continue;
+            }
+
+            // 只要找到属于我的子进程（无论状态），就标记 have_kids
+            have_kids = 1;
+
+            if(p->state == ZOMBIE) {
+                // 找到一个属于我的僵尸进程，回收它
+                pid = p->pid;
+                kfree((void*)p->kstack);
+                p->kstack = 0;
+                p->state = UNUSED;
+                p->pid = 0;
+                p->fn = 0;
+                p->parent = 0; // 清理父进程指针
+                
+                printf_color(COLOR_BLUE, "wait: reaped PID %d\n", pid);
+                return pid;
+            }
+        }
+
+        if(!have_kids) {
+            return -1;
+        }
+
+        yield();
+    }
+}
+
+// ----------------------------------------------------
+// [新增] 手册要求的测试用例
+// ----------------------------------------------------
+
+// 简单的任务：打印几次后退出
+void simple_task(void) {
+    for (int i = 0; i < 3; i++) {
+        printf("[PID %d] is running (step %d)\n", current_proc->pid, i);
+        // 模拟耗时
+        for (volatile int j = 0; j < 1000000; j++); 
+    }
+    // 函数结束会自动调用 proc_entry_point 中的 exit_process
+}
+
+// CPU 密集型任务
+void cpu_intensive_task(void) {
+    printf_color(COLOR_RED, "[PID %d] CPU task started\n", current_proc->pid);
+    for (int i = 0; i < 50000000; i++) {
+        if (i % 10000000 == 0) {
+            // 每隔一段时间打印一次，证明在运行
+            printf("[PID %d] computing... %d%%\n", current_proc->pid, i/500000);
+        }
+    }
+    printf_color(COLOR_RED, "[PID %d] CPU task finished\n", current_proc->pid);
+}
+
+// 测试1：进程创建与回收测试 (对应手册 Task 3/Test section)
+void test_process_creation(void) {
+    printf_color(COLOR_YELLOW, "\n=== Test 1: Process Creation & Reclamation ===\n");
+    
+    int created_count = 0;
+    // 尝试创建多个进程
+    for (int i = 0; i < 5; i++) {
+        int pid = create_process(simple_task);
+        if (pid > 0) {
+            printf("Created process PID %d\n", pid);
+            created_count++;
+        }
+    }
+
+    // 等待所有创建的进程结束
+    printf("Waiting for processes to exit...\n");
+    for (int i = 0; i < created_count; i++) {
+        wait_process();
+    }
+    
+    printf_color(COLOR_YELLOW, "=== Test 1 Passed ===\n");
+    
+    // 自杀退出 (因为 test_process_creation 本身也是在一个进程中运行的)
+    exit_process(); 
+}
+
+// 测试2：调度器测试 (对应手册 Task 5/Test section)
+void test_scheduler(void) {
+    printf_color(COLOR_YELLOW, "\n=== Test 2: Scheduler (Round Robin) ===\n");
+    
+    // 创建两个 CPU 密集型进程，观察它们是否交替输出
+    create_process(cpu_intensive_task);
+    create_process(cpu_intensive_task);
+    
+    // 等待它们结束
+    wait_process();
+    wait_process();
+    
+    printf_color(COLOR_YELLOW, "=== Test 2 Passed ===\n");
+    exit_process();
 }
 
 // ----------------------------------------------------
@@ -116,32 +254,28 @@ void yield(void) {
 // <--- 新增：调度器 ---
 // 对应手册 5.5 节 "实现调度器"
 // ----------------------------------------------------
+// kernel/proc.c
+
 void scheduler(void) {
     struct proc *p;
+    printf("scheduler: Starting...\n");
 
-    printf_color(COLOR_GREEN, "scheduler: Starting scheduler...\n");
-
-    // 调度器是一个无限循环
     while(1) {
-        // 必须开启中断，否则时钟中断无法触发
-        intr_on();
+        intr_on(); // 开启中断，允许时钟中断进来
 
-        // 遍历进程表 (轮转调度) [cite: 1195, 3947]
         for(p = proc; p < &proc[NPROC]; p++) {
             if(p->state == RUNNABLE) {
-                // 找到一个可运行的进程
+                
+                // 必须在这里关中断！
+                intr_off(); 
+
                 p->state = RUNNING;
-                current_proc = p; // 设置为当前进程
-
-                // 切换到进程 P
-                // swtch 会保存调度器的上下文到 scheduler_context
-                // 并加载进程 P 的上下文
+                current_proc = p;
+                
+                // 切换上下文
                 swtch(&scheduler_context, &p->context);
-
-                // --- 当进程 P 调用 yield() ---
-                // --- swtch 会返回到这里 ---
-
-                // 清理当前进程
+                
+                // 进程让出 CPU 后返回这里
                 current_proc = 0;
             }
         }
