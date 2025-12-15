@@ -8,7 +8,7 @@ OBJDUMP = $(TOOLCHAIN)objdump
 
 # 编译选项
 CFLAGS = -Wall -Werror -O0 -fno-omit-frame-pointer -ggdb -MD
-CFLAGS += -ffreestanding -nostdlib -mno-relax -mcmodel=medany -march=rv64g
+CFLAGS += -ffreestanding -nostdlib -mno-relax -mcmodel=medany -march=rv64ima_zicsr_zifencei -mabi=lp64
 CFLAGS += -Iinclude -I. 
 
 # 链接选项（仅用于内核）
