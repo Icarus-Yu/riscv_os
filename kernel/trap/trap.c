@@ -6,7 +6,7 @@
 #define TIMER_INTERVAL 1000000
 
 // 中断计数器 - 必须初始化为 0
-static volatile uint64_t timer_ticks = 0;
+ volatile uint64_t timer_ticks = 0;
 
 // 启动时间
 static uint64_t boot_time = 0;

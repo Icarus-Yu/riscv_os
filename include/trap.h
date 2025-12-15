@@ -16,5 +16,5 @@ void kerneltrap(void);
 void set_next_timer(void);
 uint64_t get_time(void);
 void cycles_to_time(uint64_t cycles, uint64_t *seconds, uint64_t *milliseconds);
-
+extern volatile uint64_t timer_ticks;
 #endif
