@@ -51,7 +51,14 @@ void main() {
     printf("====== Paging Activated, Hello Virtual Memory! ======\n");
     // 任务完成后，进入死循环
 
-
+void *p = kalloc();
+if(p) {
+    *(int*)p = 100;
+    printf("Test Physical Memory: Alloc Success, val = %d\n", *(int*)p);
+    kfree(p);
+} else {
+    printf("Test Physical Memory: Alloc Failed\n");
+}
 
     while (1);
 }
