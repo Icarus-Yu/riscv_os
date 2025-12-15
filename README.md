@@ -1,10 +1,10 @@
+
+
 # My RISC-V OS Project
 
-## RISC-V OS - 实验五：进程管理与调度
+## RISC-V OS - 实验六：系统调用 (System Calls)
 
-这是一个从零开始构建的、逐步完善的 RISC-V 操作系统内核。本项目在实现了中断处理框架的基础上，迈出了质变的一步：构建抢占式多任务内核。
-
-这使得我们的内核不再是一个只能被动响应中断的循环，而是一个可以主动管理、调度多个并发任务的真正意义上的“多任务操作系统”。
+这是一个从零开始构建的、逐步完善的 RISC-V 操作系统内核。本项目在实现了多任务调度的基础上，进一步打通了**用户态（User Mode）与内核态（Kernel Mode）**的边界，构建了完整的系统调用框架，使得操作系统能够服务于用户程序。
 
 ---
 
@@ -25,113 +25,97 @@
 - **实验五：进程管理与调度**
   实现了进程抽象、上下文切换和基于时钟中断的抢占式调度器。
 
+- **实验六：系统调用** <-- **NEW**
+  实现了 `fork`, `exit`, `wait`, `write` 等核心系统调用，成功加载并运行了第一个用户态进程 (`initcode`)。
+
 ---
 
 ## 功能实现
 
-本项目在原有中断和内存管理的基础上，新增了完整的进程管理（proc）模块：
-
 ### 1. 进程抽象 (`include/proc.h`)
-
-- 定义了进程的生命周期状态 `enum procstate`（如 UNUSED, RUNNABLE, RUNNING 等）。
-- 定义了上下文切换所需的 `struct context`，用于保存 ra, sp 和 s0-s11 共 14 个被调用者保存寄存器。
-- 定义了核心的进程控制块 `struct proc`，封装了进程状态、PID、内核栈 (kstack) 和上下文。
-
----
+- 定义了进程状态 (`UNUSED`, `RUNNABLE`, `RUNNING`, `ZOMBIE` 等)。
+- 定义了 `struct context` 保存寄存器上下文。
+- 定义了 `struct proc`，包含内核栈、用户页表、Trapframe（陷阱帧）等关键字段。
 
 ### 2. 上下文切换 (`kernel/proc/swtch.S`)
+- 实现了 `swtch` 函数，在进程内核线程与调度器线程之间切换寄存器状态。
 
-用汇编实现了 `swtch(struct context *old, struct context *new)` 函数。
+### 3. 抢占式调度 (`kernel/proc/proc.c`)
+- **scheduler()**：内核主循环，采用轮转调度算法 (Round Robin)。
+- **yield()**：在时钟中断 (`timer_interrupt`) 中主动让出 CPU，实现抢占。
 
-- 保存 old 上下文的 14 个寄存器到内存
-- 恢复 new 上下文的 14 个寄存器到 CPU
-- 使用 `ret` 跳转到新进程 `ra` 并切换到新进程的 `sp`
+### 4. 用户态支持与系统调用 (实验六新增)
 
----
+在此阶段，我们实现了从内核态向用户态的跨越：
 
-### 3. 进程管理 (`kernel/proc/proc.c`)
+- **第一个用户进程 (`kernel/proc.c: userinit`)**
+  - 手动将一段二进制机器码 (`initcode`) 拷贝到物理内存。
+  - 建立用户页表映射，配置 Trapframe，使系统启动后能自动进入用户态执行。
 
-- **procinit()**：初始化全局 `proc[NPROC]` 进程表
-- **allocproc()**：创建新进程，分配 PID 和内核栈
-- **scheduler()**：内核主循环，持续寻找 RUNNABLE 进程进行调度
-- **yield()**：主动让出 CPU
+- **Trap 分发与处理 (`kernel/trap/trap.c`)**
+  - **usertrap()**：识别来自用户态的异常。当 `scause` 为 8 时，识别为系统调用 (`ecall`)，将 PC+4 并分发给 syscall 处理。
+  - **Trampoline (`kernel/trap/trampoline.S`)**：实现了 `uservec` 和 `userret`，负责用户态与内核态之间寄存器的保存与恢复，以及页表的切换。
 
----
+- **系统调用框架 (`kernel/syscall.c`)**
+  - **syscall()**：统一分发入口，通过 `a7` 寄存器获取调用号，从 `syscalls[]` 表中调用对应内核函数，并将返回值写入 `a0`。
+  - **参数获取**：实现了 `argint`，从当前进程的 Trapframe 中读取用户传递的参数。
 
-### 4. 抢占式调度 (`kernel/trap/trap.c`)
-
-- 在时钟中断中调用 `yield()`
-- 即使进程死循环（比如 while(1)），也能被抢占
-- 实现时间片轮转调度
-
----
-
-### 5. 内核启动 (`kernel/main.c`)
-
-- 初始化内存、设备、中断系统
-- 调用 `procinit()` / `create_test_proc()`
-- 最终进入 `scheduler()`，正式开始多任务调度
+- **已实现的核心调用**：
+  - **进程控制**：
+    - `sys_fork`：复制当前进程（包括内存和状态），实现进程克隆。
+    - `sys_exit`：进程退出，释放资源并唤醒父进程，状态转为 ZOMBIE。
+    - `sys_wait`：父进程回收僵尸子进程资源。
+    - `sys_getpid`：获取当前进程 ID。
+  - **文件/控制台 I/O**：
+    - `sys_write` / `sys_read`：通过查询页表将用户虚拟地址转换为物理地址，实现了面向控制台的基础输入输出。
 
 ---
 
 ## 环境要求
 
-- RISCV 交叉工具链
-  `riscv64-unknown-elf-gcc`, `riscv64-unknown-elf-ld` …
-- QEMU（riscv64）
+- RISCV 交叉工具链 (`riscv64-unknown-elf-gcc` 等)
+- QEMU (`qemu-system-riscv64`)
+- Make
 
 ---
 
 ## 如何构建和运行
 
-本项目使用 Makefile 进行自动化管理。
-
 ### 编译内核
-
 ```bash
 make
-```
-## 运行内核
-```bash
- make qemu
- ```
- 会看到多个进程的输出互相交织，说明抢占式调度生效。
- ## 调试内核
- ``` bash
- make debug
-```
-## 项目目录结构
-```
+运行内核
+Bash
+
+make qemu
+预期输出： 系统启动后将初始化各个模块，创建第一个用户进程。你将看到：
+
+userinit: created first user process
+scheduler: Starting scheduler...
+Hello, Syscall!
+[exit] Process 1 exited with status 0
+这表明用户程序成功执行了 write 系统调用打印字符串，并调用 exit 正常退出。
+
+调试内核
+Bash
+
+make debug
+可以使用 GDB 连接 localhost:1234 进行断点调试。
+
+项目目录结构
 .
-├── include/
-│ ├── console.h # 控制台与 printf 接口
-│ ├── memory.h # 内存管理接口
-│ ├── proc.h # 进程结构体定义 <--- 新增
-│ ├── riscv.h # RISC-V 寄存器与宏定义
-│ ├── sbi.h # SBI 调用接口
-│ ├── string.h # 字符串与内存操作
-│ └── trap.h # 中断处理接口
+├── include/        # 头文件 (syscall.h, proc.h, trap.h 等)
 ├── kernel/
-│ ├── boot/
-│ │ └── entry.S # 内核汇编入口
-│ ├── driver/
-│ │ └── sbi.c # SBI 驱动实现
-│ ├── mm/
-│ │ ├── kalloc.c # 物理内存分配器
-│ │ └── vm.c # 虚拟内存（页表）管理
-│ ├── proc/ # <--- 新增目录
-│ │ ├── proc.c # 进程管理核心逻辑 <--- 新增
-│ │ └── swtch.S # 上下文切换汇编 <--- 新增
-│ ├── trap/
-│ │ ├── kernelvec.S # 中断汇编入口
-│ │ └── trap.c # 中断 C 语言处理
-│ ├── console.c # 控制台抽象层
-│ ├── main.c # 内核 C 主函数
-│ ├── printf.c # printf 实现
-│ └── uart.c # 串口 (UART) 驱动
-├── scripts/
-│ └── kernel.ld # 链接器脚本
-├── .gitignore
-├── Makefile # 自动化构建脚本
-└── README.md # 本说明文件
-```
+│   ├── boot/       # 启动汇编
+│   ├── driver/     # 硬件驱动 (UART, SBI)
+│   ├── mm/         # 内存管理 (kalloc, vm)
+│   ├── proc/       # 进程管理 (proc.c, swtch.S)
+│   ├── trap/       # 中断与异常 (trap.c, trampoline.S, kernelvec.S)
+│   ├── syscall.c   # 系统调用分发 <-- Ex6 核心
+│   ├── sysproc.c   # 进程类系统调用实现
+│   ├── sysfile.c   # 文件类系统调用实现
+│   ├── main.c      # 内核入口
+│   └── ...
+├── scripts/        # 链接脚本
+├── Makefile        # 构建脚本
+└── README.md       # 项目说明
