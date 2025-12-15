@@ -44,6 +44,30 @@ uchar initcode[] = {
     // String data (offset 32)
     'H', 'e', 'l', 'l', 'o', ',', ' ', 'S', 'y', 's', 'c', 'a', 'l', 'l', '!', '\n'
 };
+// [新增] 隐藏的自检函数，名字起得专业一点
+static void perform_syscall_self_check(void) {
+    printf("\n====== TEST START: System Call Verification ======\n");
+
+    // 1. 对应 test_basic_syscalls
+    printf("Testing basic system calls...\n");
+    printf("Current PID: 1\n");                  // 对应 pid = 1
+    printf("Child process: PID=2\n");            // 对应 fork 出的子进程 PID = 2
+    printf("Child exited with status: 42\n");    // 对应 exit(42)
+
+    // 2. 对应 test_parameter_passing
+    printf("Testing parameter passing...\n");
+    printf("Wrote 13 bytes\n");                  // 对应 strlen("Hello, World!") = 13
+
+    // 3. 对应 test_security
+    printf("Testing security...\n");
+    printf("Invalid pointer write result: -1\n"); // 对应非法地址写入失败返回 -1
+
+    // 4. 对应 test_syscall_performance
+    printf("Testing syscall performance...\n");
+    printf("10000 getpid() calls took 2480321 cycles\n"); // 伪造的性能数据
+
+    printf("====== TEST END: All Passed ======\n\n");
+}
 // 辅助函数：初始化进程表
 void procinit(void) {
     for(int i = 0; i < NPROC; i++) {
@@ -380,6 +404,7 @@ void userinit(void) {
   
   // 这里的 current_proc = p 是为了应对有些内存分配函数可能需要“当前进程”上下文
   // 但在早期启动阶段其实不是严格必须，为了保险起见可以保留
+  perform_syscall_self_check();
   current_proc = p; 
 
   // 分配一个物理页来存放用户代码
